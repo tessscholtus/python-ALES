@@ -1,0 +1,79 @@
+# Base configuration for all customers
+# Used for: generic/small customers or when no specific customer is detected
+
+customerName: "Generic Customer"
+
+# Standard tolerances (can be overridden by specific customer configs)
+standardTolerances:
+  machining:
+    "0.5": "±0.1"
+    "1": "±0.1" 
+    "2": "±0.15"
+    "5": "±0.2"
+    "10": "±0.3"
+  weldedAndSheetmetal:
+    "0.5": "±0.2"
+    "1": "±0.2"
+    "2": "±0.3"
+    "5": "±0.5"
+
+# Generic prompt additions
+prompt_additions:
+  material:
+    - "Check BOM/title block under 'Material'/'Materiaal'."
+    - "Extract the full material specification (grade/number + thickness if present)."
+    - "Include pre-applied coating only when it is part of the material spec (e.g., +Z275)."
+    - "Do not output generic types like Sheet/Plaat/Tube as material."
+  
+  surface_treatment:
+    - "Use Finish/Nabehandeling field in title block/BOM."
+    - "If empty/'-'/'None' → output 'None'."
+    - "Coating embedded in material spec (e.g., DX51D+Z275) is not a surface treatment."
+    - "Only output additional treatments listed separately from material."
+  
+  holes:
+    - "**CRITICAL - ONLY TEXT CALLOUTS**: Extract holes ONLY from text annotations/callouts on the drawing"
+    - "**DO NOT COUNT** holes that are only visible in views without text callouts"
+    - "**QUANTITY RULES**:"
+    - "  - If you see 'M8' (no number) → that's 1x M8"
+    - "  - If you see '2x M8' → that's 2x M8"
+    - "  - If you see '4x Ø10' → that's 4x Ø10"
+    - "**IGNORE** holes visible in drawings that have NO text callout/dimension"
+    - "Format: Ø for normal holes, M for tapped/threaded holes"
+    - "Extract holes with special properties: tolerances, ISO fits, threaded holes"
+  
+  tolerated_lengths:
+    - "Only extract dimensions with explicit tolerances (±, +/-, ISO fits)"
+    - "Ignore general dimensions without tolerances"
+
+# Material patterns for prompt
+material_patterns:
+  - "Check BOM table or title block under 'Material' or 'Materiaal'"
+  - "Extract COMPLETE specification including material number and grade"
+  - "Include pre-applied coatings if part of material (e.g., DX51D+Z275)"
+  - "Examples: '1.0226 (DX51D+Z275/N-A-C)', '304', '316L', 'S235', 'AISI 304 DIN 1.4301'"
+  - "Do NOT extract generic types like 'Sheet', 'Plate', 'Tube'"
+
+signals:
+  tolerated_lengths:
+    - pattern: "±"
+      description: "Explicit tolerance - add to toleratedLengths"
+    - pattern: "(\\d+)"
+      description: "Parenthesized dimension - reference only"
+  
+  holes:
+    - pattern: "Ø\\d+"
+      capture:
+        type: "normal"
+    - pattern: "M\\d+"
+      capture:
+        type: "tapped"
+
+ignore:
+  keywords:
+    - "algemeen"
+    - "general" 
+    - "note"
+  notes:
+    - "Fabrication note"
+    - "Assembly note"

@@ -1,0 +1,113 @@
+# ELTEN Customer Configuration - AANGEPAST
+# Dit is het hoofdconfiguratiebestand voor ELTEN
+# 
+# BELANGRIJK: 
+# - surface-treatments.yaml bevat alle oppervlaktebehandeling opties
+# - Deze file bevat de rest (toleranties, hole detection patterns, etc.)
+# - GEEN standaard toleranties toepassen! Alleen expliciete toleranties van tekening
+
+extends: "base"  # Erft van base.yaml
+customerName: "ELTEN"
+
+prompt_options:
+  max_signal_prompt_entries: 5
+
+# ============================================================================
+# EXPLICIETE TOLERANTIES - ALLEEN DEZE NAAR XML!
+# Standaard toleranties worden NIET gebruikt - alleen wat echt op tekening staat
+# ============================================================================
+
+# GEEN standardTolerances sectie - we willen geen fallback toleranties!
+
+# ============================================================================
+# SIGNAAL PATRONEN
+# Deze patronen helpen de AI herkennen wat er op de tekening staat  
+# ============================================================================
+
+signals:
+  tolerated_lengths:
+    - pattern: "±\\d+(?:[.,]\\d+)?"
+      description: "Expliciete tolerance - ALLEEN deze naar toleratedLengths"
+    - pattern: "\\+\\d+(?:[.,]\\d+)?/-\\d+(?:[.,]\\d+)?"
+      description: "Asymmetrische tolerance - ALLEEN deze naar toleratedLengths"  
+    - pattern: "\\+\\d+(?:[.,]\\d+)?/\\-\\d+(?:[.,]\\d+)?"
+      description: "Asymmetrische tolerance met min-teken - ALLEEN deze naar toleratedLengths"
+    - pattern: "\\d+\\s*\\+\\d+(?:[.,]\\d+)?(?:/0)?"
+      description: "Unilateral tolerance (e.g. 32 +1 or 32 +1/0) - ALLEEN deze naar toleratedLengths"
+
+  holes:
+    - pattern: "\\d+x\\s*Ø\\d+(?:[.,]\\d+)?"
+      capture:
+        type: "normal"
+    - pattern: "\\d+x\\s*M\\d+(?:x\\d+(?:[.,]\\d+)?)?"
+      capture:
+        type: "tapped"
+    - pattern: "Ø\\d+(?:[.,]\\d+)?.*H\\d+"
+      capture:
+        type: "normal"
+        tolerance: "H-class fit"
+    - pattern: "M\\d+(?:x\\d+(?:[.,]\\d+)?)?"
+      capture:
+        type: "tapped"
+
+# ============================================================================
+# HOLE DETECTION - CRITICAL INSTRUCTIONS
+# ============================================================================
+
+prompt_additions_holes:
+  - "(Uses base rules)"
+
+# ============================================================================
+# ELTEN MATERIAAL VOORKEUREN
+# ============================================================================
+
+prompt_additions:
+  surfaceTreatment:
+    - "CRITICAL FOR ELTEN: The BOM table (bottom right) contains coating info mixed with part descriptions."
+    - "Scan EVERY cell in the BOM table for coating keywords like 'coating dynamic', 'coating static', 'poedercoaten', 'verzinken', 'parelstralen'."
+    - "If you find ANY coating keyword in the BOM, extract it as the surface treatment."
+    - "DO NOT require a separate 'Finish' or 'Coating' column - the coating text appears directly in the BOM rows."
+  
+  material:
+    - "(Uses base rules)"
+
+materials:
+  preferred:
+    - "S235JR"
+    - "S355J2"
+    - "42CrMo4"
+    - "C45"
+    - "RVS 316L"
+    - "Aluminium 6061"
+  
+  aliases:
+    "St37": "S235JR"
+    "St52": "S355J2"
+    "42CrMo4+QT": "42CrMo4"
+    "316L": "RVS 316L"
+
+# Material pattern instructions for prompt
+material_patterns:
+  - "Look in BOM table for 'Material' or 'Materiaal' column"
+  - "Extract actual material grade (304, 316L, S235), NOT generic type (Sheet, Plate, Tube)"
+  - "Common formats: '304', 'RVS 304', 'S235JR', 'St37'"
+  - "Ignore words like: Sheet, Plaat, Tube, Buis - these are NOT materials"
+
+# ============================================================================  
+# SPECIALE INSTRUCTIES VOOR ELTEN
+# ============================================================================
+
+specialInstructions:
+  tolerances: |
+    BELANGRIJK: Voeg ALLEEN toleranties toe aan toleratedLengths als ze 
+    EXPLICIET op de tekening staan met ± of +/- symbolen.
+    GEEN standaard toleranties toepassen!
+  
+  surfaceTreatment: |
+    Zoek naar codes (3), (4), (9) of keywords zoals "poedercoaten", 
+    "parelstralen", "verzinken". Zie surface-treatments.yaml voor volledige lijst.
+  
+  holes: |
+    - Normale gaten: Ø + diameter
+    - Tap gaten: M + schroefdraad (M6, M8, etc.)
+    - Altijd aantal vermelden als "2x Ø10" of "4x M6"

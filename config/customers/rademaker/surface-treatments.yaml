@@ -1,0 +1,81 @@
+enabled: true
+strictMode: true
+default: "None"
+
+options:
+  - code: "none"
+    name: "None"
+    displayName: "None"
+    keywords:
+      - "geen"
+      - "none"
+      - "n/a"
+      - "-"
+      - ""
+      - "no treatment"
+
+  - code: "bead_blast"
+    name: "Bead blasted"
+    displayName: "Bead blasted"
+    keywords:
+      - "parelstralen"
+      - "bead blast"
+      - "bead blasted"
+      - "stralen"
+      - "kogelstralen"
+
+  - code: "powder"
+    name: "Powder coating"
+    displayName: "Powder coating"
+    keywords:
+      - "poedercoaten"
+      - "powder coat"
+      - "powder coating"
+      - "coating dynamic"
+      - "coating static"
+      - "coating statisch"
+      - "coating dynamisch"
+      - "9"
+      - "(9)"
+
+  - code: "galv"
+    name: "Electrogalvanized"
+    displayName: "Electrogalv."
+    keywords:
+      - "elektrogalvaniseren"
+      - "electrogalv"
+      - "galvanized"
+      - "galvaniseren"
+      - "verzinken"
+
+  - code: "anodized"
+    name: "Anodized"
+    displayName: "Anodized"
+    keywords:
+      - "anodiseren"
+      - "anodized"
+      - "eloxeren"
+
+  - code: "finish"
+    name: "Finish"
+    displayName: "Finish (glasparelen)"
+    keywords:
+      - "finish"
+      - "glasparelen"
+
+  - code: "see_remarks"
+    name: "See remark(s) on drawing"
+    displayName: "See remark(s) on drawing"
+    keywords:
+      - "see remark"
+      - "see remarks"
+      - "zie opmerking"
+      - "zie opmerkingen"
+
+  - code: "teflon"
+    name: "Coat, Teflon"
+    displayName: "Tefloniseren"
+    keywords:
+      - "teflon"
+      - "coat, teflon"
+      - "tefloniseren"

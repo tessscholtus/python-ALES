@@ -1,0 +1,157 @@
+customerName: Rademaker
+
+# Rademaker-specific prompt additions
+prompt_additions:
+  general:
+    - "**CRITICAL**: Only extract dimensions WITH explicit tolerances (±, +/-, ISO fits)"
+    - "Simple dimensions without tolerance → IGNORE completely"
+    - "Surface roughness (Ra, triangle symbol) → IGNORE, not a tolerance"
+    - "TUBE notation (e.g., TUBE 40x40x2 L471) → NOT a hole, ignore"
+    - "Part number: use document filename from title block"
+  
+  tolerated_lengths:
+    - "ONLY add dimensions with explicit ± tolerance (e.g., 471 ±0,2)"
+    - "ONLY add dimensions with +/- tolerance (e.g., +0,5/-0,2)"
+    - "Simple dimensions (e.g., 40, 2, 12,5) → do NOT add"
+    - "Accept comma as decimal separator: 471 ±0,2 means 471 ±0.2mm"
+  
+  holes:
+    - "**CRITICAL - ONLY TEXT CALLOUTS**: Extract holes ONLY from text annotations/callouts on the drawing"
+    - "**DO NOT COUNT** holes that are only visible in views without text callouts"
+    - "**QUANTITY RULES**:"
+    - "  - If you see 'M8' (no number) → that's 1x M8"
+    - "  - If you see '2x M8' → that's 2x M8"
+    - "  - If you see '4x Ø10' → that's 4x Ø10"
+    - "  - '[3x]' bracket notation means count of 3 identical holes"
+    - "**IGNORE** holes visible in drawings that have NO text callout/dimension"
+    - "ONLY extract holes WITH special properties:"
+    - "  - Holes with ± tolerances (e.g., Ø10 ±0,1)"
+    - "  - Holes with ISO tolerances (h7, h9, H7, H9, f7)"
+    - "  - Tapped holes (M6, M8, M10, etc.)"
+    - "  - Multiple holes (4x Ø6, 2x M8, Ø10 ±0,1 [3x])"
+    - "Simple holes without tolerance (Ø30) → do NOT add to XML"
+    - "Accept comma as decimal separator: Ø60,3 means Ø60.3mm"
+    - "PT_TUBE notation is part description, NOT holes"
+
+  surface_treatment:
+    - "Look in title block at BOTTOM of drawing - 'Surface treatment' field"
+    - "Only write the exact value from that field (e.g., None, Powder coating)"
+    - "Material execution (CR_FINISH_2B) is NOT surface treatment"
+  
+  material:
+    - "**PRIMARY LOCATION**: Check BOM table (bottom right) for 'Basic Material' row"
+    - "**READ THE COMPLETE FIELD**: Extract ENTIRE text from material field, do NOT stop after first word!"
+    - "Material is typically listed under the label 'Basic Material' in the BOM"
+    - "Common formats: 'AISI 304', 'DIN 1.4301', 'AISI 304 DIN 1.4301'"
+    - "**INCLUDE thickness** that follows material (e.g., 'AISI 304 2mm', 'DIN 1.4301 3 mm', 'RVS 1.5mm')"
+    - "**WRONG**: Extracting 'AISI 304' when field says 'AISI 304 2mm' - read the FULL field!"
+    - "If BOM has multiple rows, material is often in the row directly below 'Basic Material'"
+    - "Also check title block and material notes"
+    - "Examples: AISI 304, DIN 1.4301, S235, AISI 316L, RVS 2 mm"
+
+# Signal patterns - help AI recognize what's on the drawing
+signals:
+  holes:
+    # Holes with ± tolerance and bracket count (e.g., Ø10 ±0,1 [3x])
+    - pattern: "Ø\\d+(?:[.,]\\d+)?\\s*±\\s*\\d+(?:[.,]\\d+)?\\s*\\[(\\d+)x\\]"
+      capture:
+        type: "normal"
+        tolerance: "±"
+      description: "Multiple holes with ± tolerance (e.g., Ø10 ±0,1 [3x])"
+    
+    # Simple hole notation (e.g., Ø30, Ø20)
+    - pattern: "Ø\\d+(?:[.,]\\d+)?"
+      capture:
+        type: "normal"
+      description: "Simple hole diameter (e.g., Ø30) - detect but don't write to XML unless special"
+    
+    # Lowercase ISO tolerances (h9, h11, f7, etc.)
+    - pattern: "⌀?\\d+[.,]?\\d*[hHfF]\\d+"
+      capture:
+        type: "normal"
+      description: "Holes with lowercase ISO tolerance (e.g., ⌀11h9, ⌀3h11)"
+    
+    # Comma decimal notation (European style)
+    - pattern: "⌀(\\d+),(\\d+)"
+      capture:
+        type: "normal"
+      description: "Holes with comma decimal (e.g., ⌀60,3)"
+    
+    # Tube diameters from BOM descriptions (PT_TUBE D60,3)
+    - pattern: "D(\\d+),(\\d+)"
+      capture:
+        type: "normal"
+      description: "Tube diameter from part description (e.g., D60,3)"
+    
+    # Multiple holes notation (e.g., 4x Ø6)
+    - pattern: "\\d+x\\s*Ø\\d+(?:[.,]\\d+)?"
+      capture:
+        type: "normal"
+      description: "Multiple holes (e.g., 4x Ø6)"
+    
+    # Tapped holes with count (e.g., 2x M8)
+    - pattern: "\\d+x\\s*M\\d+(?:x\\d+(?:[.,]\\d+)?)?"
+      capture:
+        type: "tapped"
+      description: "Multiple tapped holes (e.g., 2x M8)"
+    
+    # H-class fits (e.g., Ø20 H7)
+    - pattern: "Ø\\d+(?:[.,]\\d+)?.*H\\d+"
+      capture:
+        type: "normal"
+        tolerance: "H-class fit"
+      description: "Holes with H-tolerance (e.g., Ø20 H7)"
+    
+    # Single tapped holes (e.g., M6)
+    - pattern: "M\\d+(?:x\\d+(?:[.,]\\d+)?)?"
+      capture:
+        type: "tapped"
+      description: "Single tapped hole (e.g., M6)"
+
+  tolerated_lengths:
+    # Ra values - surface roughness, NOT tolerances - IGNORE
+    - pattern: "Ra\\s*\\d+(?:[.,]\\d+)?"
+      description: "Surface roughness (Ra) - IGNORE"
+    
+    # Dimension WITH symmetric tolerance (e.g., 471 ±0,2)
+    - pattern: "\\d+\\s*±\\s*\\d+(?:[.,]\\d+)?"
+      description: "Dimension with symmetric tolerance (e.g., 471 ±0,2) - ADD to toleratedLengths"
+    
+    # Just ± without dimension context
+    - pattern: "±\\d+(?:[.,]\\d+)?"
+      description: "Symmetric tolerance symbol - ADD to toleratedLengths"
+    
+    # Asymmetric tolerance (e.g., +0.5/-0.2)
+    - pattern: "\\+\\d+(?:[.,]\\d+)?/-\\d+(?:[.,]\\d+)?"
+      description: "Asymmetric tolerance - ONLY these to toleratedLengths"
+    
+    # Asymmetric with minus sign (e.g., +0.5/−0.2)
+    - pattern: "\\+\\d+(?:[.,]\\d+)?/\\-\\d+(?:[.,]\\d+)?"
+      description: "Asymmetric tolerance with minus sign - ONLY these to toleratedLengths"
+    
+    # Comma decimals with tolerance (e.g., 100,5 ±0,2)
+    - pattern: "\\d+[.,]\\d+\\s*±\\s*\\d+[.,]?\\d*"
+      description: "Tolerated lengths with comma decimals"
+
+  material:
+    # AISI stainless steel grades
+    - pattern: "AISI\\s*\\d+"
+      description: "AISI material designation (e.g., AISI 304, AISI 316L)"
+    
+    # DIN material numbers
+    - pattern: "DIN\\s*\\d+\\.\\d+"
+      description: "DIN material number (e.g., DIN 1.4301, DIN 1.4404)"
+    
+    # Combined AISI and DIN
+    - pattern: "AISI\\s*\\d+.*DIN\\s*\\d+\\.\\d+"
+      description: "Combined AISI and DIN (e.g., AISI 304 DIN 1.4301)"
+    
+    # Basic Material label in BOM
+    - pattern: "Basic Material"
+      description: "Label indicating material row in BOM table"
+
+# Material pattern instructions for prompt
+material_patterns:
+  - "Look in BOM table (bottom right) under 'Basic Material' label"
+  - "Extract full material designation: AISI 304, DIN 1.4301, or combined format"
+  - "Common Rademaker materials: AISI 304, AISI 316L, DIN 1.4301, S235"

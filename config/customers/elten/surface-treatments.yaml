@@ -1,0 +1,49 @@
+# ELTEN Surface Treatment Options
+enabled: true
+strictMode: true
+default: "None"
+
+options:
+  - name: "Bead blasted"
+    displayName: "Bead blasted (3)"
+    keywords:
+      - "parelstralen"
+      - "bead blast"
+      - "bead blasted"
+      - "stralen"
+      - "3"
+      - "(3)"
+
+  - name: "Powder coating"
+    displayName: "Powder coating (9)"
+    keywords:
+      - "poedercoaten"
+      - "powder coat"
+      - "powder coating"
+      - "coating"
+      - "coating dynamic"
+      - "coating static"
+      - "coating statisch"
+      - "coating dynamisch"
+      - "9"
+      - "(9)"
+
+  - name: "Electrogalv."
+    displayName: "Electrogalv. (4)"
+    keywords:
+      - "elektrogalvaniseren"
+      - "electrogalv"
+      - "galvanized"
+      - "galvaniseren"
+      - "verzinken"
+      - "4"
+      - "(4)"
+
+  - name: "Anodized"
+    displayName: "Anodized (2)"
+    keywords:
+      - "anodiseren"
+      - "anodized"
+      - "eloxeren"
+      - "2"
+      - "(2)"
