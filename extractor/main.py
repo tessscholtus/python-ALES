@@ -377,9 +377,12 @@ async def extract_batch(
                     f"[yellow]Assembly BOM-only re-extraction failed: {e}[/yellow]"
                 )
 
+    # Determine output filename based on assembly name
+    output_name = assembly_part_number if assembly_part_number else "order"
+    
     # Write combined JSON + XML
-    json_out = output_dir / "order.json"
-    xml_out = output_dir / "order.xml"
+    json_out = output_dir / f"{output_name}.json"
+    xml_out = output_dir / f"{output_name}.xml"
 
     with open(json_out, "w", encoding="utf-8") as f:
         json.dump(combined_order.model_dump(by_alias=True, exclude_none=True), f, indent=2)
