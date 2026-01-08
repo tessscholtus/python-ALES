@@ -6,7 +6,7 @@ Een Python CLI-tool die technische tekeningen uit PDF's extraheert met behulp va
 
 ## Projectstructuur
 
-```
+```txt
 python_version/
 ├── extractor/                 # Hoofdmodule (~1,770 regels)
 │   ├── main.py               # CLI entry point, batch/single processing
@@ -20,10 +20,14 @@ python_version/
 │   ├── constants.py          # Globale constanten (model selectie)
 │   └── utils.py              # Utility functies
 ├── config/
-│   ├── base.yaml             # Basis configuratie
+│   ├── base.yaml             # Basis configuratie (altijd geladen)
 │   └── customers/            # Klant-specifieke configs
 │       ├── elten/
+│       │   ├── config.yaml
+│       │   └── surface-treatments.yaml
 │       └── rademaker/
+│           ├── config.yaml
+│           └── surface-treatments.yaml
 ├── requirements.txt
 ├── setup.py
 └── .env                      # API key (NIET COMMITTEN!)
@@ -100,6 +104,48 @@ Override via CLI: `--model gemini-3.0-flash-preview`
 - `pydantic>=2.0.0` - Data validatie
 - `rich>=13.0.0` - Terminal UI
 - `click>=8.0.0` - CLI framework
+
+---
+
+## Klantdetectie & YAML Configuraties
+
+### Auto-detectie (`--customer auto`)
+
+**Aanbevolen voor productie.** Het systeem detecteert automatisch de klant:
+
+1. Eerste PDF wordt geanalyseerd door Gemini Vision
+2. Zoekt naar "ELTEN" of "RADEMAKER" in de BOM tabel (rechtsonder)
+3. Laadt bijbehorende klant-configuratie
+4. Fallback naar `base` als geen klant gevonden
+
+### Configuratie Hiërarchie
+
+```txt
+base.yaml                              ← Altijd geladen (basis regels)
+    ↓ merged met
+customers/<klant>/config.yaml          ← Klant-specifieke overrides
+    +
+customers/<klant>/surface-treatments.yaml
+```
+
+### Wat de YAML configs bepalen
+
+| Config Sectie | Functie |
+|---------------|---------|
+| `signals.tolerated_lengths` | Regex patronen voor tolerantie detectie |
+| `signals.holes` | Patronen voor gat/tapgat herkenning |
+| `surfaceTreatments` | Coating keywords en display names |
+| `material_patterns` | Instructies voor materiaal extractie |
+| `prompt_additions` | Klant-specifieke prompt instructies |
+
+### Wanneer welke optie gebruiken
+
+| Optie | Gebruik |
+|-------|---------|
+| `-c auto` | **Productie** - klant onbekend, automatisch detecteren |
+| `-c elten` | Forceer ELTEN config (als auto verkeerd detecteert) |
+| `-c rademaker` | Forceer Rademaker config |
+| `-c base` | Alleen basis regels, geen klant-specifieke |
 
 ---
 

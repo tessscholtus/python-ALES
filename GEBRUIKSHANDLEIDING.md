@@ -82,10 +82,54 @@ python -m extractor.main /pad/naar/pdf_folder -c auto -o /pad/naar/output
 
 | Waarde | Beschrijving |
 |--------|--------------|
-| `elten` | ELTEN configuratie (default) |
-| `rademaker` | Rademaker configuratie |
+| `auto` | **Aanbevolen** - Automatische detectie via Vision API |
+| `elten` | ELTEN configuratie (forceer) |
+| `rademaker` | Rademaker configuratie (forceer) |
 | `base` | Basis configuratie (geen klant-specifieke regels) |
-| `auto` | Automatische detectie via Vision API |
+
+#### Hoe werkt klantdetectie?
+
+**`--customer auto` (Aanbevolen voor productie)**
+
+1. De eerste PDF wordt geanalyseerd door Gemini Vision
+2. Gemini zoekt naar klantnamen in de BOM tabel (rechtsonder)
+3. Bij detectie van "ELTEN" of "RADEMAKER" wordt de bijbehorende configuratie geladen
+4. Als geen klant gevonden wordt, valt het systeem terug op `base` configuratie
+
+**Wanneer `auto` gebruiken:**
+
+- Bij onbekende orders waar je de klant niet van tevoren weet
+- In productie-omgevingen waar tekeningen automatisch binnenkomen
+- Bij gemengde orders van verschillende klanten
+
+**Wanneer specifieke klant (`elten`/`rademaker`) gebruiken:**
+
+- Als je 100% zeker weet welke klant het is
+- Als auto-detectie een verkeerde klant detecteert
+- Voor testen met specifieke klant-configuraties
+
+#### YAML Configuraties
+
+Het systeem laadt klant-specifieke configuraties uit YAML bestanden:
+
+```txt
+config/
+├── base.yaml                    # Basis regels (altijd geladen)
+└── customers/
+    ├── elten/
+    │   ├── config.yaml          # ELTEN-specifieke extractie regels
+    │   └── surface-treatments.yaml
+    └── rademaker/
+        ├── config.yaml          # Rademaker-specifieke extractie regels
+        └── surface-treatments.yaml
+```
+
+Deze configs bepalen:
+
+- Tolerantie detectie patronen
+- Hole/gat herkenning regels
+- Surface treatment keywords
+- Materiaal extractie instructies
 
 ### Model Opties
 
