@@ -232,7 +232,7 @@ Controleer modelnaam:
 
 - `gemini-2.5-pro` (correct)
 - `gemini-3.0-flash-preview` (correct)
-- ~~`gemini-3-flash`~~ (incorrect)
+
 
 ### Pad met Spaties
 

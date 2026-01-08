@@ -353,15 +353,24 @@ async def extract_batch(
                 assembly_data = await process_with_retry(assembly_base64, assembly_options)
 
                 if assembly_data.items:
-                    replacement = assembly_data.items[0]
-                    combined_order.items = [
-                        OrderItem(
-                            **{**item.model_dump(), **replacement.model_dump(exclude_unset=True)}
-                        )
-                        if item.part_number == assembly_part_number
-                        else item
-                        for item in combined_order.items
-                    ]
+                    bom_data = assembly_data.items[0]
+                    # Smart merge: only take surface treatment and BOM part numbers from re-extraction
+                    # Keep original holes, tolerances, and other data from first extraction
+                    updated_items = []
+                    for item in combined_order.items:
+                        if item.part_number == assembly_part_number:
+                            # Check if re-extraction found a better surface treatment
+                            new_surface = bom_data.surface_treatment
+                            old_surface = item.surface_treatment
+                            # Use new surface treatment if original was None/empty
+                            if new_surface and new_surface.lower() not in ("none", ""):
+                                if not old_surface or old_surface.lower() in ("none", ""):
+                                    item.surface_treatment = new_surface
+                            # Also take BOM part numbers if found
+                            if bom_data.bom_part_numbers:
+                                item.bom_part_numbers = bom_data.bom_part_numbers
+                        updated_items.append(item)
+                    combined_order.items = updated_items
             except Exception as e:
                 console.print(
                     f"[yellow]Assembly BOM-only re-extraction failed: {e}[/yellow]"
