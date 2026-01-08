@@ -1,6 +1,7 @@
 """Gemini API service for PDF extraction."""
 
 import base64
+import json
 from pathlib import Path
 from typing import Any, Optional
 
@@ -18,7 +19,7 @@ from .prompt_builder import (
     build_minimal_prompt,
     build_text_signals_section,
 )
-from .types import ExtractionOptions, OrderDetails, OrderItem, TextSignal
+from .types import ExtractionOptions, OrderDetails
 from .utils import get_api_key
 
 
@@ -294,7 +295,6 @@ async def extract_order_details_from_pdf(
         raise ValueError("Empty response from Gemini")
 
     # Parse response
-    import json
     try:
         data = json.loads(json_text)
     except json.JSONDecodeError as e:

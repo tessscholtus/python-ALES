@@ -1,7 +1,6 @@
 """Customer detection service using Gemini Vision API."""
 
 import logging
-from typing import Literal
 
 import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions
@@ -11,9 +10,6 @@ from .types import CustomerDetectionResult
 from .utils import get_api_key
 
 logger = logging.getLogger(__name__)
-
-
-CustomerType = Literal["elten", "rademaker", "base", "unknown"]
 
 
 async def detect_customer_from_pdf_vision(

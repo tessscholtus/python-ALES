@@ -118,7 +118,6 @@ def build_minimal_prompt(p: PromptInput) -> str:
 - Examples: "Verzinkt", "Poedercoaten", "Coating Dynamic", or "None"{surface_additions}
 
 **2. HOLES:**
-**2. HOLES:**
 - Normal: "O20" or "O20 H9" -> type=normal, diameter=20, tolerance=H9
 - Tapped: "M6" or "4x M6" -> type=tapped, threadSize=M6, count=4
 - Reamed: pre-drill + final -> type=reamed, notes="Pre-drill O19.5"
