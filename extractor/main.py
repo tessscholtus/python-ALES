@@ -11,7 +11,6 @@ Usage:
 """
 
 import asyncio
-import json
 import random
 import sys
 from pathlib import Path
@@ -91,7 +90,6 @@ async def extract_single_pdf(
     pdf_path: Path,
     customer_id: str = "elten",
     output_dir: Optional[Path] = None,
-    json_path: Optional[Path] = None,
     xml_path: Optional[Path] = None,
     model: str = DEFAULT_GEMINI_MODEL,
 ) -> OrderDetails:
@@ -102,7 +100,6 @@ async def extract_single_pdf(
         pdf_path: Path to PDF file
         customer_id: Customer ID (elten, rademaker, base)
         output_dir: Optional output directory
-        json_path: Optional explicit JSON output path
         xml_path: Optional explicit XML output path
         model: Gemini model to use
 
@@ -142,21 +139,13 @@ async def extract_single_pdf(
     # Determine output paths
     if output_dir:
         output_dir.mkdir(parents=True, exist_ok=True)
-        json_out = output_dir / "order.json"
-        xml_out = output_dir / "order.xml"
-    elif json_path or xml_path:
-        json_out = json_path or Path("out.json")
-        xml_out = xml_path or Path("out.xml")
+        xml_out = output_dir / f"{order_name}.xml"
+    elif xml_path:
+        xml_out = xml_path
     else:
         output_dir = Path("test_output") / f"order_{order_name}"
         output_dir.mkdir(parents=True, exist_ok=True)
-        json_out = output_dir / "order.json"
-        xml_out = output_dir / "order.xml"
-
-    # Write JSON
-    with open(json_out, "w", encoding="utf-8") as f:
-        json.dump(data.model_dump(by_alias=True, exclude_none=True), f, indent=2)
-    console.print(f"[green]Wrote JSON to {json_out}[/green]")
+        xml_out = output_dir / f"{order_name}.xml"
 
     # Write XML
     xml_str = build_simple_order_xml(data)
@@ -380,13 +369,9 @@ async def extract_batch(
 
     # Determine output filename based on assembly name
     output_name = assembly_part_number if assembly_part_number else "order"
-    
-    # Write combined JSON + XML
-    json_out = output_dir / f"{output_name}.json"
-    xml_out = output_dir / f"{output_name}.xml"
 
-    with open(json_out, "w", encoding="utf-8") as f:
-        json.dump(combined_order.model_dump(by_alias=True, exclude_none=True), f, indent=2)
+    # Write XML only
+    xml_out = output_dir / f"{output_name}.xml"
 
     xml_str = build_simple_order_xml(combined_order)
     with open(xml_out, "w", encoding="utf-8") as f:
@@ -395,8 +380,7 @@ async def extract_batch(
     console.print(f"\n[green]Done: {success_count} successful, {fail_count} failed[/green]")
     if assembly_part_number:
         console.print(f"[blue]Detected assembly: {assembly_part_number}[/blue]")
-    console.print(f"[green]Output: {xml_out}[/green]")
-    console.print(f"[green]Output: {json_out}[/green]\n")
+    console.print(f"[green]Output: {xml_out}[/green]\n")
 
     return combined_order
 
@@ -405,14 +389,12 @@ async def extract_batch(
 @click.argument("pdf_path", required=True, type=click.Path(exists=True))
 @click.option("--customer", "-c", default="elten", help="Customer ID (elten, rademaker, base, auto)")
 @click.option("--output", "-o", type=click.Path(), help="Output directory")
-@click.option("--json", "json_path", type=click.Path(), help="JSON output path")
 @click.option("--xml", "xml_path", type=click.Path(), help="XML output path")
 @click.option("--model", "-m", default=DEFAULT_GEMINI_MODEL, help="Gemini model to use")
 def cli(
     pdf_path: str,
     customer: str,
     output: Optional[str],
-    json_path: Optional[str],
     xml_path: Optional[str],
     model: str,
 ):
@@ -449,7 +431,6 @@ def cli(
                 pdf_path=pdf_path_obj,
                 customer_id=customer,
                 output_dir=output_dir,
-                json_path=Path(json_path) if json_path else None,
                 xml_path=Path(xml_path) if xml_path else None,
                 model=model,
             )

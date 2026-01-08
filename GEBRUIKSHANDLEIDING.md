@@ -40,8 +40,8 @@ python -m extractor.main tekening.pdf -m gemini-3.0-flash-preview    # korte ver
 python -m extractor.main tekening.pdf --output /pad/naar/output
 python -m extractor.main tekening.pdf -o /pad/naar/output    # korte versie
 
-# Met specifieke output bestanden
-python -m extractor.main tekening.pdf --json output.json --xml output.xml
+# Met specifiek XML pad
+python -m extractor.main tekening.pdf --xml output.xml
 
 # Combinaties
 python -m extractor.main tekening.pdf -c rademaker -m gemini-3.0-flash-preview -o resultaten/
@@ -76,8 +76,7 @@ python -m extractor.main /pad/naar/pdf_folder -c auto -o /pad/naar/output
 | `--customer` | `-c` | Klant configuratie | `elten` |
 | `--model` | `-m` | Gemini model | `gemini-2.5-pro` |
 | `--output` | `-o` | Output folder | `test_output/order_<naam>/` |
-| `--json` | - | Specifiek JSON pad | `<output>/order.json` |
-| `--xml` | - | Specifiek XML pad | `<output>/order.xml` |
+| `--xml` | - | Specifiek XML pad | `<output>/<partnumber>.xml` |
 
 ### Customer Opties
 
@@ -99,15 +98,14 @@ python -m extractor.main /pad/naar/pdf_folder -c auto -o /pad/naar/output
 
 ## Output Locaties
 
-### Default Output
+### Output Formaat
 
-Als je geen `--output` opgeeft:
+**Alleen XML** - bestandsnaam is de assembly part number:
 
-```
+```txt
 test_output/
-└── order_<PARTNUMBER>/
-    ├── <PARTNUMBER>.json    # Gestructureerde data
-    └── <PARTNUMBER>.xml     # XML voor ERP import
+└── order_<FOLDERNAAM>/
+    └── <ASSEMBLY_PARTNUMBER>.xml
 ```
 
 ### Single PDF Voorbeeld
@@ -117,11 +115,11 @@ python -m extractor.main tekening_12345.pdf
 ```
 
 Output:
-```
+
+```txt
 test_output/
 └── order_12345/
-    ├── order.json
-    └── order.xml
+    └── 12345.xml
 ```
 
 ### Batch Voorbeeld
@@ -131,10 +129,10 @@ python -m extractor.main order_folder/ -c auto
 ```
 
 Output:
-```
+
+```txt
 test_output/
 └── order_order_folder/
-    ├── <ASSEMBLY_PARTNUMBER>.json    # Gecombineerde data van alle PDFs
     └── <ASSEMBLY_PARTNUMBER>.xml
 ```
 
@@ -145,10 +143,10 @@ python -m extractor.main tekening.pdf -o /Users/naam/Desktop/resultaten
 ```
 
 Output:
-```
+
+```txt
 /Users/naam/Desktop/resultaten/
-├── order.json
-└── order.xml
+└── <PARTNUMBER>.xml
 ```
 
 ---
@@ -184,31 +182,7 @@ python -m extractor.main C:\Users\Naam\tekeningen\order_123 -c auto -o C:\output
 
 ---
 
-## Output Formaat
-
-### JSON Structuur
-
-```json
-{
-  "items": [
-    {
-      "partNumber": "12345_Rev_01",
-      "holes": [
-        {"count": 4, "type": "tapped", "threadSize": "M6"},
-        {"count": 2, "type": "normal", "diameter": "20", "tolerance": "H9"}
-      ],
-      "toleratedLengths": [
-        {"dimension": "50", "upperTolerance": "+0.2", "lowerTolerance": "-0.2"}
-      ],
-      "surfaceTreatment": "Verzinkt",
-      "material": "AISI 304 3mm",
-      "bomPartNumbers": ["12346", "12347"]
-    }
-  ]
-}
-```
-
-### XML Structuur
+## XML Output Formaat
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -248,13 +222,14 @@ source .venv/bin/activate
 
 Maak `.env` bestand aan in `python_version/`:
 
-```
+```txt
 GEMINI_API_KEY=jouw_api_key_hier
 ```
 
 ### "Model not found" Error
 
 Controleer modelnaam:
+
 - `gemini-2.5-pro` (correct)
 - `gemini-3.0-flash-preview` (correct)
 - ~~`gemini-3-flash`~~ (incorrect)

@@ -41,16 +41,28 @@ pip install -e .
 # .env aanmaken met GEMINI_API_KEY=<jouw_key>
 
 # Single PDF (gebruikt default model: gemini-2.5-pro)
-pdf-extract drawing.pdf
-pdf-extract drawing.pdf --customer elten
+python -m extractor.main drawing.pdf
+python -m extractor.main drawing.pdf --customer elten
 
 # Met specifiek model
-pdf-extract drawing.pdf --model gemini-3.0-flash-preview
+python -m extractor.main drawing.pdf --model gemini-3.0-flash-preview
 
 # Batch processing
-pdf-extract /path/to/pdfs --customer auto
-pdf-extract /path/to/pdfs --customer rademaker --model gemini-3.0-flash-preview
+python -m extractor.main /path/to/pdfs --customer auto
+python -m extractor.main /path/to/pdfs --customer rademaker --model gemini-3.0-flash-preview
 ```
+
+## Output
+
+**Alleen XML output** - bestandsnaam is de assembly part number:
+
+```
+test_output/
+└── order_<FOLDERNAAM>/
+    └── <ASSEMBLY_PARTNUMBER>.xml
+```
+
+Voorbeeld: Als assembly `10009043_1` is → output is `10009043_1.xml`
 
 ## Gemini Modellen
 
@@ -106,46 +118,19 @@ De volgende bugs zijn opgelost in de huidige versie:
 | Async wrapper problemen | ThreadPoolExecutor fallback |
 | Dubbele regel in prompt | Verwijderd |
 
----
-
-## Bekende Beperkingen
-
-### MEDIUM
-
-#### 1. Case-Sensitive Assembly Matching
-**Locatie:** [main.py:347-350](extractor/main.py#L347-L350)
-
-Assembly PDF matching is case-sensitive. Als bestandsnaam afwijkt van part number (qua hoofdletters), wordt assembly niet gevonden.
-
-**Workaround:** Zorg dat bestandsnamen exact overeenkomen met part numbers.
-
-#### 2. Deprecated google.generativeai Package
-Het huidige `google.generativeai` package is deprecated. Migratie naar `google.genai` is aanbevolen.
-
-**Impact:** FutureWarning bij elke run, maar functionaliteit blijft werken.
-
-### LAAG
-
-#### 3. Geen CLI Argument Validatie
-Customer ID wordt niet gevalideerd. Ongeldige customer valt terug naar `base` config.
-
-#### 4. Geen Retry voor Customer Detection
-Customer detection heeft geen retry logic (main extraction wel).
-
----
-
 ## Code Conventies
 
 - **Naamgeving:** Mix van snake_case en camelCase (vanwege API compatibility)
 - **Type Hints:** Pydantic models met `Field(alias="camelCase")`
 - **Async:** Gebruik `asyncio` voor API calls
 - **Config:** YAML bestanden in `config/` directory
-- **Output:** JSON en XML naar `test_output/order_<partNumber>/`
+- **Output:** XML naar `test_output/order_<partNumber>/<assembly>.xml`
 - **Logging:** `logging` module voor warnings/errors
 
 ## Testing
 
 Test samples staan in `test_samples/`:
+
 - `10009043_1/` - ELTEN order (3 PDFs)
 - `Rademaker tekening/` - Rademaker order (9 PDFs)
 
