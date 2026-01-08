@@ -63,6 +63,11 @@ def group_tapped_holes(holes: list[dict[str, Any]]) -> str:
 
     # Sort by thread size (M6, M8, M10, etc.)
     def sort_key(item: tuple[str, int]) -> int:
+        # Match specifically M-thread sizes, not any digit
+        match = re.search(r"M(\d+)", item[0])
+        if match:
+            return int(match.group(1))
+        # Fallback: try to match any number
         match = re.search(r"\d+", item[0])
         return int(match.group()) if match else 0
 

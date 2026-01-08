@@ -1,12 +1,16 @@
 """Customer detection service using Gemini Vision API."""
 
+import logging
 from typing import Literal
 
 import google.generativeai as genai
+from google.api_core import exceptions as google_exceptions
 
 from .constants import DEFAULT_GEMINI_MODEL
 from .types import CustomerDetectionResult
 from .utils import get_api_key
+
+logger = logging.getLogger(__name__)
 
 
 CustomerType = Literal["elten", "rademaker", "base", "unknown"]
@@ -88,12 +92,19 @@ Your response should be a single word: either the customer name or UNKNOWN."""
                 reason=f'Found customer name "{response_text}" but no specific config - using base configuration',
             )
 
-    except Exception as e:
-        print(f"Warning: Vision-based customer detection failed: {e}")
+    except google_exceptions.GoogleAPIError as e:
+        logger.warning(f"Vision-based customer detection failed (API error): {e}")
         return CustomerDetectionResult(
             customer="base",
             confidence="low",
             reason=f"Vision API error: {str(e)}",
+        )
+    except ValueError as e:
+        logger.warning(f"Vision-based customer detection failed (value error): {e}")
+        return CustomerDetectionResult(
+            customer="base",
+            confidence="low",
+            reason=f"Value error: {str(e)}",
         )
 
 
@@ -133,4 +144,16 @@ def detect_customer_from_text(pdf_text: str) -> CustomerDetectionResult:
 def detect_customer_from_pdf_vision_sync(pdf_base64: str) -> CustomerDetectionResult:
     """Synchronous version of detect_customer_from_pdf_vision."""
     import asyncio
-    return asyncio.run(detect_customer_from_pdf_vision(pdf_base64))
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is not None:
+        # Already in async context - create new loop in thread
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(asyncio.run, detect_customer_from_pdf_vision(pdf_base64))
+            return future.result()
+    else:
+        return asyncio.run(detect_customer_from_pdf_vision(pdf_base64))

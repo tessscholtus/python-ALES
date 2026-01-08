@@ -36,10 +36,10 @@ class ToleratedLength(BaseModel):
 
 class TextSignal(BaseModel):
     """OCR hint (deprecated, kept for reference)."""
-    category: Literal["hole", "tolerance", "tap_hole", "turning_part", "finishing"]
-    raw_value: str = Field(alias="rawValue")
-    page: int
-    source: str
+    category: str  # Was Literal, but models may return other values
+    raw_value: str = Field(default="", alias="rawValue")
+    page: Optional[int] = None
+    source: Optional[str] = None
     context: Optional[str] = None
     note: Optional[str] = None
 

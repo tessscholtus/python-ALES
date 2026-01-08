@@ -295,7 +295,10 @@ async def extract_order_details_from_pdf(
 
     # Parse response
     import json
-    data = json.loads(json_text)
+    try:
+        data = json.loads(json_text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON response from Gemini: {e}") from e
 
     # Assign part number from filename
     part_number = pdf_filename or "unknown_part_1"
@@ -331,4 +334,16 @@ def extract_order_details_from_pdf_sync(
 ) -> OrderDetails:
     """Synchronous version of extract_order_details_from_pdf."""
     import asyncio
-    return asyncio.run(extract_order_details_from_pdf(pdf_base64, options))
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is not None:
+        # Already in async context - create new loop in thread
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(asyncio.run, extract_order_details_from_pdf(pdf_base64, options))
+            return future.result()
+    else:
+        return asyncio.run(extract_order_details_from_pdf(pdf_base64, options))

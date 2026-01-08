@@ -103,9 +103,22 @@ def find_config_root() -> Path:
     return Path.cwd() / "config"
 
 
-def load_yaml(file_path: Path) -> dict[str, Any]:
-    """Load a YAML file."""
+def load_yaml(file_path: Path, required: bool = False) -> dict[str, Any]:
+    """Load a YAML file.
+
+    Args:
+        file_path: Path to the YAML file
+        required: If True, raise FileNotFoundError when file doesn't exist
+
+    Returns:
+        Parsed YAML content as dictionary
+
+    Raises:
+        FileNotFoundError: If required=True and file doesn't exist
+    """
     if not file_path.exists():
+        if required:
+            raise FileNotFoundError(f"Required config file not found: {file_path}")
         return {}
     with open(file_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
@@ -122,9 +135,9 @@ def load_customer_config(customer_id: str) -> CustomerConfig:
     """
     config_root = find_config_root()
 
-    # Load base config
+    # Load base config (required)
     base_yaml_path = config_root / "base.yaml"
-    base_config = load_yaml(base_yaml_path)
+    base_config = load_yaml(base_yaml_path, required=True)
 
     if customer_id == "base":
         # For 'base' customer, just use base.yaml directly

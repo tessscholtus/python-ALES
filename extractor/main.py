@@ -37,7 +37,6 @@ from .customer_detection import detect_customer_from_pdf_vision
 from .gemini_service import extract_order_details_from_pdf, read_pdf_as_base64
 from .types import ExtractionOptions, OrderDetails, OrderItem
 from .xml_writer import build_simple_order_xml
-from .constants import DEFAULT_GEMINI_MODEL
 
 # Load environment variables
 load_dotenv()
@@ -213,20 +212,22 @@ def detect_assembly(items: list[OrderItem]) -> Optional[str]:
 consecutive_failures = 0
 MAX_CONSECUTIVE_FAILURES = 5
 CIRCUIT_BREAKER_DELAY = 5 * 60  # 5 minutes
+_failure_lock = asyncio.Lock()
 
 
 async def circuit_breaker_check():
     """Check circuit breaker and pause if needed."""
     global consecutive_failures
-    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-        console.print(
-            f"\n[red]CIRCUIT BREAKER: {consecutive_failures} consecutive failures[/red]"
-        )
-        console.print(
-            f"[yellow]Pausing for {CIRCUIT_BREAKER_DELAY // 60} minutes to let API recover...[/yellow]\n"
-        )
-        await asyncio.sleep(CIRCUIT_BREAKER_DELAY)
-        consecutive_failures = 0
+    async with _failure_lock:
+        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+            console.print(
+                f"\n[red]CIRCUIT BREAKER: {consecutive_failures} consecutive failures[/red]"
+            )
+            console.print(
+                f"[yellow]Pausing for {CIRCUIT_BREAKER_DELAY // 60} minutes to let API recover...[/yellow]\n"
+            )
+            await asyncio.sleep(CIRCUIT_BREAKER_DELAY)
+            consecutive_failures = 0
 
 
 async def extract_batch(
@@ -314,7 +315,8 @@ async def extract_batch(
                     model=model,
                 )
                 data = await process_with_retry(pdf_base64, options)
-                consecutive_failures = 0  # Reset on success
+                async with _failure_lock:
+                    consecutive_failures = 0  # Reset on success
 
                 if data.items:
                     all_items.extend(data.items)
@@ -330,7 +332,8 @@ async def extract_batch(
                     await asyncio.sleep(1)
 
             except Exception as e:
-                consecutive_failures += 1
+                async with _failure_lock:
+                    consecutive_failures += 1
                 fail_count += 1
                 console.print(f"[red]Error extracting {pdf_name}: {e}[/red]")
                 progress.update(task_id, description=f"Processing... (Last: [red]Error {pdf_name}[/red])")
