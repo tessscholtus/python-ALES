@@ -75,14 +75,14 @@ Voorbeeld: Als assembly `10009043_1` is → output is `10009043_1.xml`
 | Model | Kosten/PDF | Gebruik |
 |-------|-----------|---------|
 | `gemini-2.5-pro` (default) | ~€0.07 | Hoogste kwaliteit, stabiel |
-| `gemini-3.0-flash-preview` | ~€0.03 | Nieuwste preview, goedkoper |
+| `gemini-3-flash-preview` | ~€0.03 | Nieuwste preview, goedkoper |
 
 ### Kostenberekening (50.000 - 80.000 PDFs/jaar)
 
 | Model | Per PDF | 50k PDFs/jaar | 80k PDFs/jaar |
 |-------|---------|---------------|---------------|
 | `gemini-2.5-pro` | €0.07 | €3.680/jaar | €5.890/jaar |
-| `gemini-3.0-flash-preview` | €0.03 | €1.380/jaar | €2.210/jaar |
+| `gemini-3-flash-preview` | €0.03 | €1.380/jaar | €2.210/jaar |
 
 **Besparing met 3.0 Flash:** ~€2.300 - €3.680/jaar
 
@@ -91,10 +91,10 @@ Voorbeeld: Als assembly `10009043_1` is → output is `10009043_1.xml`
 Het default model wordt ingesteld in [constants.py](extractor/constants.py):
 
 ```python
-DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"  # Of "gemini-3.0-flash-preview"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"  # Of "gemini-3-flash-preview"
 ```
 
-Override via CLI: `--model gemini-3.0-flash-preview`
+Override via CLI: `--model gemini-3-flash-preview`
 
 ## Dependencies
 

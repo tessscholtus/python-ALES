@@ -33,8 +33,8 @@ python -m extractor.main tekening.pdf -c elten              # korte versie
 
 # Met specifiek model
 python -m extractor.main tekening.pdf --model gemini-2.5-pro
-python -m extractor.main tekening.pdf --model gemini-3.0-flash-preview
-python -m extractor.main tekening.pdf -m gemini-3.0-flash-preview    # korte versie
+python -m extractor.main tekening.pdf --model gemini-3-flash-preview
+python -m extractor.main tekening.pdf -m gemini-3-flash-preview    # korte versie
 
 # Met custom output folder
 python -m extractor.main tekening.pdf --output /pad/naar/output
@@ -44,7 +44,7 @@ python -m extractor.main tekening.pdf -o /pad/naar/output    # korte versie
 python -m extractor.main tekening.pdf --xml output.xml
 
 # Combinaties
-python -m extractor.main tekening.pdf -c rademaker -m gemini-3.0-flash-preview -o resultaten/
+python -m extractor.main tekening.pdf -c rademaker -m gemini-3-flash-preview -o resultaten/
 ```
 
 ### 2. Batch Extractie (Folder met PDFs)
@@ -61,7 +61,7 @@ python -m extractor.main /pad/naar/pdf_folder --customer elten
 python -m extractor.main /pad/naar/pdf_folder --customer rademaker
 
 # Met specifiek model
-python -m extractor.main /pad/naar/pdf_folder -c auto -m gemini-3.0-flash-preview
+python -m extractor.main /pad/naar/pdf_folder -c auto -m gemini-3-flash-preview
 
 # Met custom output folder
 python -m extractor.main /pad/naar/pdf_folder -c auto -o /pad/naar/output
@@ -136,7 +136,7 @@ Deze configs bepalen:
 | Model | Kosten/PDF | Beschrijving |
 |-------|-----------|--------------|
 | `gemini-2.5-pro` | ~€0.07 | Hoogste kwaliteit, stabiel (default) |
-| `gemini-3.0-flash-preview` | ~€0.03 | Nieuwste preview, goedkoper |
+| `gemini-3-flash-preview` | ~€0.03 | Nieuwste preview, goedkoper |
 
 ---
 
