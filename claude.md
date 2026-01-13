@@ -8,7 +8,7 @@ Een Python CLI-tool die technische tekeningen uit PDF's extraheert met behulp va
 
 ```txt
 python_version/
-├── extractor/                 # Hoofdmodule (~1,770 regels)
+├── extractor/                 # Hoofdmodule
 │   ├── main.py               # CLI entry point, batch/single processing
 │   ├── gemini_service.py     # Gemini API integratie
 │   ├── prompt_builder.py     # Dynamische prompt generatie
@@ -49,11 +49,11 @@ python -m extractor.main drawing.pdf
 python -m extractor.main drawing.pdf --customer elten
 
 # Met specifiek model
-python -m extractor.main drawing.pdf --model gemini-3.0-flash-preview
+python -m extractor.main drawing.pdf --model gemini-3-flash-preview
 
 # Batch processing
 python -m extractor.main /path/to/pdfs --customer auto
-python -m extractor.main /path/to/pdfs --customer rademaker --model gemini-3.0-flash-preview
+python -m extractor.main /path/to/pdfs --customer rademaker
 ```
 
 ## Output
@@ -61,49 +61,45 @@ python -m extractor.main /path/to/pdfs --customer rademaker --model gemini-3.0-f
 **Alleen XML output** - bestandsnaam is de assembly part number:
 
 ```
-test_output/
+output/
 └── order_<FOLDERNAAM>/
     └── <ASSEMBLY_PARTNUMBER>.xml
 ```
 
 Voorbeeld: Als assembly `10009043_1` is → output is `10009043_1.xml`
 
+---
+
 ## Gemini Modellen
 
-### Beschikbare Modellen
+### Benchmark Resultaten (67 PDFs, 6 orders)
 
-| Model | Kosten/PDF | Gebruik |
-|-------|-----------|---------|
-| `gemini-2.5-pro` (default) | ~€0.07 | Hoogste kwaliteit, stabiel |
-| `gemini-3-flash-preview` | ~€0.03 | Nieuwste preview, goedkoper |
+| Model | Kosten/PDF | Snelheid | Accuraatheid |
+|-------|-----------|----------|--------------|
+| `gemini-2.5-pro` (default) | ~€0.07 | 22.8s/PDF | **100%** - geen fouten |
+| `gemini-3-flash-preview` | ~€0.03 | 34.0s/PDF | 99% - 1 hallucinatie |
 
-### Kostenberekening (50.000 - 80.000 PDFs/jaar)
+**Conclusie benchmark:**
+- **Pro is 33% sneller** en betrouwbaarder
+- **Flash is 57% goedkoper** maar hallucineerde 1x tapgaten die er niet waren
+- **Aanbeveling: gebruik Pro voor productie**
 
-| Model | Per PDF | 50k PDFs/jaar | 80k PDFs/jaar |
-|-------|---------|---------------|---------------|
-| `gemini-2.5-pro` | €0.07 | €3.680/jaar | €5.890/jaar |
-| `gemini-3-flash-preview` | €0.03 | €1.380/jaar | €2.210/jaar |
+### Jaarlijkse Kosten (geschat)
 
-**Besparing met 3.0 Flash:** ~€2.300 - €3.680/jaar
+| Volume | gemini-2.5-pro | gemini-3-flash-preview |
+|--------|----------------|------------------------|
+| 50.000 PDFs | €3.500 | €1.500 |
+| 80.000 PDFs | €5.600 | €2.400 |
 
 ### Model Selectie
 
-Het default model wordt ingesteld in [constants.py](extractor/constants.py):
+Het default model wordt ingesteld in `extractor/constants.py`:
 
 ```python
 DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"  # Of "gemini-3-flash-preview"
 ```
 
 Override via CLI: `--model gemini-3-flash-preview`
-
-## Dependencies
-
-- `google-generativeai>=0.8.0` - Gemini API (deprecated, migratie naar `google.genai` aanbevolen)
-- `pyyaml>=6.0` - YAML parsing
-- `python-dotenv>=1.0.0` - Environment variables
-- `pydantic>=2.0.0` - Data validatie
-- `rich>=13.0.0` - Terminal UI
-- `click>=8.0.0` - CLI framework
 
 ---
 
@@ -149,20 +145,16 @@ customers/<klant>/surface-treatments.yaml
 
 ---
 
-## Opgeloste Bugs (v1.1)
+## Dependencies
 
-De volgende bugs zijn opgelost in de huidige versie:
+- `google-generativeai>=0.8.0` - Gemini API
+- `pyyaml>=6.0` - YAML parsing
+- `python-dotenv>=1.0.0` - Environment variables
+- `pydantic>=2.0.0` - Data validatie
+- `rich>=13.0.0` - Terminal UI
+- `click>=8.0.0` - CLI framework
 
-| Bug | Oplossing |
-|-----|-----------|
-| Duplicate import in main.py | Verwijderd |
-| JSON parsing zonder error handling | Try/except toegevoegd |
-| Race condition in circuit breaker | `asyncio.Lock()` toegevoegd |
-| Generic exception handling | Specifieke exceptions + logging |
-| Incorrecte regex voor M-threads | `M(\d+)` pattern |
-| Stille config failures | `required` parameter toegevoegd |
-| Async wrapper problemen | ThreadPoolExecutor fallback |
-| Dubbele regel in prompt | Verwijderd |
+---
 
 ## Code Conventies
 
@@ -170,25 +162,14 @@ De volgende bugs zijn opgelost in de huidige versie:
 - **Type Hints:** Pydantic models met `Field(alias="camelCase")`
 - **Async:** Gebruik `asyncio` voor API calls
 - **Config:** YAML bestanden in `config/` directory
-- **Output:** XML naar `test_output/order_<partNumber>/<assembly>.xml`
+- **Output:** XML naar `output/order_<partNumber>/<assembly>.xml`
 - **Logging:** `logging` module voor warnings/errors
 
-## Testing
+---
 
-Test samples staan in `test_samples/`:
-
-- `10009043_1/` - ELTEN order (3 PDFs)
-- `Rademaker tekening/` - Rademaker order (9 PDFs)
-
-```bash
-# Test run
-python -m extractor.main test_samples/10009043_1 --customer auto
-python -m extractor.main test_samples/Rademaker\ tekening --customer auto
-```
-
-## Aanbevelingen voor Ontwikkeling
+## Aanbevelingen
 
 1. **Altijd** `.env` buiten version control houden
-2. Test met beide modellen voor kwaliteitsvergelijking
+2. Gebruik `gemini-2.5-pro` voor productie (hoogste accuraatheid)
 3. Monitor API kosten via Google Cloud Console
-4. Migreer naar `google.genai` package wanneer stabiel
+4. Gebruik `--customer auto` voor automatische klantdetectie

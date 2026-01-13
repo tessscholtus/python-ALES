@@ -75,7 +75,7 @@ python -m extractor.main /pad/naar/pdf_folder -c auto -o /pad/naar/output
 |-------|------|--------------|---------|
 | `--customer` | `-c` | Klant configuratie | `elten` |
 | `--model` | `-m` | Gemini model | `gemini-2.5-pro` |
-| `--output` | `-o` | Output folder | `test_output/order_<naam>/` |
+| `--output` | `-o` | Output folder | `output/order_<naam>/` |
 | `--xml` | - | Specifiek XML pad | `<output>/<partnumber>.xml` |
 
 ### Customer Opties
@@ -131,12 +131,43 @@ Deze configs bepalen:
 - Surface treatment keywords
 - Materiaal extractie instructies
 
-### Model Opties
+---
 
-| Model | Kosten/PDF | Beschrijving |
-|-------|-----------|--------------|
-| `gemini-2.5-pro` | ~€0.07 | Hoogste kwaliteit, stabiel (default) |
-| `gemini-3-flash-preview` | ~€0.03 | Nieuwste preview, goedkoper |
+## Model Keuze
+
+### Beschikbare Modellen
+
+| Model | Kosten/PDF | Snelheid | Accuraatheid |
+|-------|-----------|----------|--------------|
+| `gemini-2.5-pro` | ~€0.07 | 22.8s/PDF | **Hoogste** - geen fouten |
+| `gemini-3-flash-preview` | ~€0.03 | 34.0s/PDF | Goed - incidenteel hallucinaties |
+
+### Benchmark Resultaten (67 PDFs, 6 orders)
+
+| Metric | gemini-2.5-pro | gemini-3-flash-preview |
+|--------|----------------|------------------------|
+| Totale tijd | 25.5 min | 38.0 min |
+| Kosten | €4.69 | €2.01 |
+| Tapgat detectie | 100% correct | 1 hallucinatie (4x M6 gezien die er niet was) |
+| Tolerantie detectie | 100% correct | 100% correct |
+
+### Aanbeveling
+
+**Gebruik `gemini-2.5-pro` (default)** voor productie:
+- Sneller (33% sneller dan Flash)
+- Geen hallucinaties bij tapgat detectie
+- Betrouwbaarder voor kritieke productie-informatie
+
+**Overweeg `gemini-3-flash-preview`** alleen als:
+- Kosten belangrijker zijn dan 100% accuraatheid
+- Je de output handmatig controleert
+
+### Jaarlijkse Kosten (geschat)
+
+| Volume | gemini-2.5-pro | gemini-3-flash-preview | Besparing |
+|--------|----------------|------------------------|-----------|
+| 50.000 PDFs | €3.500 | €1.500 | €2.000 |
+| 80.000 PDFs | €5.600 | €2.400 | €3.200 |
 
 ---
 
@@ -147,7 +178,7 @@ Deze configs bepalen:
 **Alleen XML** - bestandsnaam is de assembly part number:
 
 ```txt
-test_output/
+output/
 └── order_<FOLDERNAAM>/
     └── <ASSEMBLY_PARTNUMBER>.xml
 ```
@@ -161,7 +192,7 @@ python -m extractor.main tekening_12345.pdf
 Output:
 
 ```txt
-test_output/
+output/
 └── order_12345/
     └── 12345.xml
 ```
@@ -175,7 +206,7 @@ python -m extractor.main order_folder/ -c auto
 Output:
 
 ```txt
-test_output/
+output/
 └── order_order_folder/
     └── <ASSEMBLY_PARTNUMBER>.xml
 ```
@@ -203,12 +234,11 @@ Output:
 python -m extractor.main /Users/tess/tekeningen/part_001.pdf
 ```
 
-### Voorbeeld 2: Rademaker Order met Goedkoop Model
+### Voorbeeld 2: Rademaker Order
 
 ```bash
 python -m extractor.main /Users/tess/orders/rademaker_batch/ \
     --customer rademaker \
-    --model gemini-3.0-flash-preview \
     --output /Users/tess/output/
 ```
 
@@ -238,15 +268,34 @@ python -m extractor.main C:\Users\Naam\tekeningen\order_123 -c auto -o C:\output
       <SurfaceTreatment>Verzinkt</SurfaceTreatment>
       <Holes>
         <Hole count="4" type="tapped" threadSize="M6"/>
-        <Hole count="2" type="normal" diameter="20" tolerance="H9"/>
+        <Hole count="2" type="reamed" diameter="20" tolerance="H9"/>
       </Holes>
+      <ToleratedLengths>
+        <ToleratedLength>
+          <Dimension>250</Dimension>
+          <Type>symmetric</Type>
+          <Upper>+0.5</Upper>
+          <Lower>-0.5</Lower>
+        </ToleratedLength>
+      </ToleratedLengths>
       <PDF_Warnings>
-        <Message>Nabewerking: 4x M6 tapgat, 2x O20 H9</Message>
+        <Message>Nabewerking: 4x M6 tapgat, 2x O20 H9, 250 tol</Message>
       </PDF_Warnings>
     </Item>
   </Items>
 </Order>
 ```
+
+### Wat wordt gedetecteerd?
+
+| Element | Beschrijving | Voorbeeld |
+|---------|--------------|-----------|
+| `PartNumber` | Onderdeelnummer uit tekening | `MD-22-08811_2` |
+| `Material` | Materiaal + dikte | `S235 8 mm` |
+| `SurfaceTreatment` | Oppervlaktebehandeling | `Powder coating (9)` |
+| `Holes` | Gaten met toleranties | `M6 tapped`, `O20 H9` |
+| `ToleratedLengths` | Maten met toleranties | `250 ±0.5` |
+| `PDF_Warnings` | Samenvatting voor operator | Nabewerkingen |
 
 ---
 
@@ -275,8 +324,7 @@ GEMINI_API_KEY=jouw_api_key_hier
 Controleer modelnaam:
 
 - `gemini-2.5-pro` (correct)
-- `gemini-3.0-flash-preview` (correct)
-
+- `gemini-3-flash-preview` (correct, zonder ".0")
 
 ### Pad met Spaties
 
@@ -291,6 +339,6 @@ python -m extractor.main "/Users/naam/My Documents/order folder" -c auto
 ## Tips
 
 1. **Gebruik `--customer auto`** voor batch orders - detecteert automatisch ELTEN/Rademaker
-2. **Gebruik `gemini-3.0-flash-preview`** voor kostenbesparing (~60% goedkoper)
+2. **Gebruik `gemini-2.5-pro`** (default) voor hoogste accuraatheid
 3. **Check de XML output** voor operator warnings (tapgaten, toleranties)
-4. **Bestandsnamen** worden part numbers - zorg voor correcte naamgeving
+4. **Assembly detectie** - het systeem detecteert automatisch welke PDF de assembly is
