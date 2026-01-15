@@ -143,9 +143,8 @@ async def extract_single_pdf(
     elif xml_path:
         xml_out = xml_path
     else:
-        output_dir = Path("output") / f"order_{order_name}"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        xml_out = output_dir / f"{order_name}.xml"
+        # Default: write XML in the same folder as the input PDF
+        xml_out = pdf_path.parent / f"{order_name}.xml"
 
     # Write XML
     xml_str = build_simple_order_xml(data)
@@ -254,7 +253,8 @@ async def extract_batch(
     # Determine output directory
     order_name = pdfs_folder.name
     if output_dir is None:
-        output_dir = Path("output") / f"order_{order_name}"
+        # Default: write XML in the same folder as the input PDFs
+        output_dir = pdfs_folder
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Auto-detect customer from first PDF
