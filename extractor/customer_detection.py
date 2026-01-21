@@ -1,9 +1,10 @@
 """Customer detection service using Gemini Vision API."""
 
+import base64
 import logging
 
-import google.generativeai as genai
-from google.api_core import exceptions as google_exceptions
+from google import genai
+from google.genai import types
 
 from .constants import DEFAULT_GEMINI_MODEL
 from .types import CustomerDetectionResult
@@ -28,9 +29,7 @@ async def detect_customer_from_pdf_vision(
     """
     try:
         api_key = get_api_key()
-        genai.configure(api_key=api_key)
-
-        model = genai.GenerativeModel(DEFAULT_GEMINI_MODEL)
+        client = genai.Client(api_key=api_key)
 
         prompt = """You are analyzing a technical drawing PDF. Look at the BOM table (Bill of Materials) in the BOTTOM RIGHT corner of the drawing.
 
@@ -52,14 +51,15 @@ IMPORTANT:
 Your response should be a single word: either the customer name or UNKNOWN."""
 
         # Create PDF part
-        pdf_part = {
-            "inline_data": {
-                "mime_type": "application/pdf",
-                "data": pdf_base64,
-            }
-        }
+        pdf_part = types.Part.from_bytes(
+            data=base64.b64decode(pdf_base64),
+            mime_type="application/pdf",
+        )
 
-        response = await model.generate_content_async([prompt, pdf_part])
+        response = await client.aio.models.generate_content(
+            model=DEFAULT_GEMINI_MODEL,
+            contents=[prompt, pdf_part],
+        )
         response_text = response.text.strip().upper()
 
         # Parse the response
@@ -88,19 +88,12 @@ Your response should be a single word: either the customer name or UNKNOWN."""
                 reason=f'Found customer name "{response_text}" but no specific config - using base configuration',
             )
 
-    except google_exceptions.GoogleAPIError as e:
-        logger.warning(f"Vision-based customer detection failed (API error): {e}")
+    except Exception as e:
+        logger.warning(f"Vision-based customer detection failed: {e}")
         return CustomerDetectionResult(
             customer="base",
             confidence="low",
             reason=f"Vision API error: {str(e)}",
-        )
-    except ValueError as e:
-        logger.warning(f"Vision-based customer detection failed (value error): {e}")
-        return CustomerDetectionResult(
-            customer="base",
-            confidence="low",
-            reason=f"Value error: {str(e)}",
         )
 
 

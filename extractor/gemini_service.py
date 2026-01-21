@@ -5,8 +5,8 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
-import google.generativeai as genai
-from google.generativeai.types import HarmBlockThreshold, HarmCategory
+from google import genai
+from google.genai import types
 
 from .config_loader import (
     CustomerConfig,
@@ -252,42 +252,27 @@ async def extract_order_details_from_pdf(
         )
         prompt = build_minimal_prompt(prompt_input)
 
-    # Configure Gemini
+    # Configure Gemini client (new google-genai API)
     api_key = get_api_key()
-    genai.configure(api_key=api_key)
-
-    # Create the model with JSON response
-    model = genai.GenerativeModel(
-        model_name=model_name,
-        generation_config={
-            "response_mime_type": "application/json",
-            "response_schema": ORDER_DETAILS_SCHEMA,
-            "temperature": 0.0,
-            "top_p": 1.0,
-            "top_k": 1,
-        },
-    )
-
-    # Safety settings (allow all content for technical drawings)
-    safety_settings = {
-        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-    }
+    client = genai.Client(api_key=api_key)
 
     # Create PDF part
-    pdf_part = {
-        "inline_data": {
-            "mime_type": "application/pdf",
-            "data": pdf_base64,
-        }
-    }
+    pdf_part = types.Part.from_bytes(
+        data=base64.b64decode(pdf_base64),
+        mime_type="application/pdf",
+    )
 
-    # Generate content
-    response = await model.generate_content_async(
-        [prompt, pdf_part],
-        safety_settings=safety_settings,
+    # Generate content with JSON response
+    response = await client.aio.models.generate_content(
+        model=model_name,
+        contents=[prompt, pdf_part],
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=ORDER_DETAILS_SCHEMA,
+            temperature=0.0,
+            top_p=1.0,
+            top_k=1,
+        ),
     )
 
     json_text = response.text
