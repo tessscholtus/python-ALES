@@ -137,19 +137,24 @@ async def extract_single_pdf(
     )
 
     # Determine output paths
+    # Format: PDF_XML_<folder_name>.xml (e.g., PDF_XML_20260001.xml)
+    folder_name = pdf_path.parent.name
+    xml_filename = f"PDF_XML_{folder_name}.xml"
+    
     if output_dir:
         output_dir.mkdir(parents=True, exist_ok=True)
-        xml_out = output_dir / f"{order_name}.xml"
+        xml_out = output_dir / xml_filename
     elif xml_path:
         xml_out = xml_path
     else:
         # Default: write XML in the same folder as the input PDF
-        xml_out = pdf_path.parent / f"{order_name}.xml"
+        xml_out = pdf_path.parent / xml_filename
 
     # Write XML
     xml_str = build_simple_order_xml(data)
     with open(xml_out, "w", encoding="utf-8") as f:
         f.write(xml_str)
+    
     console.print(f"[green]Wrote XML to {xml_out}[/green]")
 
     return data
@@ -376,8 +381,9 @@ async def extract_batch(
                     f"[yellow]Assembly BOM-only re-extraction failed: {e}[/yellow]"
                 )
 
-    # Determine output filename based on assembly name
-    output_name = assembly_part_number if assembly_part_number else "order"
+    # Determine output filename based on input folder name
+    # Format: PDF_XML_<folder_name>.xml (e.g., PDF_XML_20260001.xml)
+    output_name = f"PDF_XML_{pdfs_folder.name}"
 
     # Write XML only
     xml_out = output_dir / f"{output_name}.xml"

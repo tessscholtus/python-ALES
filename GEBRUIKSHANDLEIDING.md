@@ -175,53 +175,54 @@ Deze configs bepalen:
 
 ### Output Formaat
 
-**Alleen XML** - bestandsnaam is de assembly part number:
+**Alleen XML** - bestandsnaam is gebaseerd op de input mapnaam:
 
 ```txt
-output/
-└── order_<FOLDERNAAM>/
-    └── <ASSEMBLY_PARTNUMBER>.xml
+input_folder/                  ← De map met PDFs die je inlaadt
+└── PDF_XML_<MAPNAAM>.xml      ← Output XML in dezelfde map
 ```
 
 ### Single PDF Voorbeeld
 
 ```bash
-python -m extractor.main tekening_12345.pdf
+python -m extractor.main /Users/tess/orders/10009043_1/tekening.pdf
 ```
 
 Output:
 
 ```txt
-output/
-└── order_12345/
-    └── 12345.xml
+/Users/tess/orders/10009043_1/
+├── tekening.pdf
+└── PDF_XML_10009043_1.xml     ← XML in dezelfde map als PDF
 ```
 
 ### Batch Voorbeeld
 
 ```bash
-python -m extractor.main order_folder/ -c auto
+python -m extractor.main /Users/tess/orders/20260001/ -c auto
 ```
 
 Output:
 
 ```txt
-output/
-└── order_order_folder/
-    └── <ASSEMBLY_PARTNUMBER>.xml
+/Users/tess/orders/20260001/
+├── tekening1.pdf
+├── tekening2.pdf
+├── tekening3.pdf
+└── PDF_XML_20260001.xml       ← XML met mapnaam
 ```
 
 ### Custom Output
 
 ```bash
-python -m extractor.main tekening.pdf -o /Users/naam/Desktop/resultaten
+python -m extractor.main /Users/tess/orders/order123/ -o /Users/naam/Desktop/resultaten
 ```
 
 Output:
 
 ```txt
 /Users/naam/Desktop/resultaten/
-└── <PARTNUMBER>.xml
+└── PDF_XML_order123.xml
 ```
 
 ---
@@ -342,3 +343,4 @@ python -m extractor.main "/Users/naam/My Documents/order folder" -c auto
 2. **Gebruik `gemini-2.5-pro`** (default) voor hoogste accuraatheid
 3. **Check de XML output** voor operator warnings (tapgaten, toleranties)
 4. **Assembly detectie** - het systeem detecteert automatisch welke PDF de assembly is
+5. **XML naamgeving** - De output heet `PDF_XML_<mapnaam>.xml` en staat in dezelfde map als de input PDFs

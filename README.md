@@ -78,12 +78,13 @@ pdf-extract batch /path/to/pdfs --output results/
 
 ## Output
 
-- **JSON**: Structured data with holes, tolerances, material, surface treatment
 - **XML**: Formatted output with operator warnings for tap holes, toleranced holes, critical dimensions
 
+Output format: `PDF_XML_<foldername>.xml`
+
 Default output location:
-- Single PDF: `test_output/order_<partNumber>/`
-- Batch: `test_output/order_<foldername>/`
+- Single PDF: Same folder as the input PDF
+- Batch: Same folder as the input PDFs
 
 ## Project Structure
 
@@ -125,11 +126,12 @@ python_version/
 ## Example
 
 ```bash
-# Analyze a technical drawing
-$ pdf-extract MD-123.pdf --customer elten
+# Analyze a batch of technical drawings
+$ pdf-extract /path/to/order_123/ --customer auto
 
-Processing PDF: MD-123
-Extracting with Gemini...
-Wrote JSON to test_output/order_MD-123/order.json
-Wrote XML to test_output/order_MD-123/order.xml
+Auto-detecting customer from first PDF...
+Detected customer: ELTEN (high confidence)
+Processing 5 PDFs...
+Done: 5 successful, 0 failed
+Output: /path/to/order_123/PDF_XML_order_123.xml
 ```

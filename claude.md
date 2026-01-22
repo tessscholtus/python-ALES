@@ -58,15 +58,14 @@ python -m extractor.main /path/to/pdfs --customer rademaker
 
 ## Output
 
-**Alleen XML output** - bestandsnaam is de assembly part number:
+**Alleen XML output** - bestandsnaam is gebaseerd op de input mapnaam:
 
 ```
-output/
-└── order_<FOLDERNAAM>/
-    └── <ASSEMBLY_PARTNUMBER>.xml
+input_folder/           ← De map met PDFs die je inlaadt
+└── PDF_XML_<MAPNAAM>.xml   ← Output XML in dezelfde map
 ```
 
-Voorbeeld: Als assembly `10009043_1` is → output is `10009043_1.xml`
+Voorbeeld: Als je map `10009043_1` heet → output is `PDF_XML_10009043_1.xml`
 
 ---
 
@@ -147,7 +146,7 @@ customers/<klant>/surface-treatments.yaml
 
 ## Dependencies
 
-- `google-generativeai>=0.8.0` - Gemini API
+- `google-genai>=1.0.0` - Gemini API (nieuwe SDK)
 - `pyyaml>=6.0` - YAML parsing
 - `python-dotenv>=1.0.0` - Environment variables
 - `pydantic>=2.0.0` - Data validatie
@@ -162,7 +161,7 @@ customers/<klant>/surface-treatments.yaml
 - **Type Hints:** Pydantic models met `Field(alias="camelCase")`
 - **Async:** Gebruik `asyncio` voor API calls
 - **Config:** YAML bestanden in `config/` directory
-- **Output:** XML naar `output/order_<partNumber>/<assembly>.xml`
+- **Output:** XML naar input folder als `PDF_XML_<mapnaam>.xml`
 - **Logging:** `logging` module voor warnings/errors
 
 ---
