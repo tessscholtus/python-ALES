@@ -2,27 +2,61 @@
 
 Extract manufacturing data from technical drawing PDFs using Gemini AI.
 
-## Installation
+## Installatie
 
-```bash
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+### Windows (Aanbevolen - Automatisch)
 
-# Install dependencies
+1. Download de code van GitHub (als ZIP of via git clone)
+2. Open PowerShell in de map waar de code staat
+3. Voer uit:
+   ```powershell
+   .\install.ps1
+   ```
+4. Het script doet automatisch:
+   - Virtual environment aanmaken
+   - Alle packages installeren
+   - Installatie verifiëren
+   - `.env` bestand aanmaken (vraagt om API key)
+
+### Windows (Handmatig)
+
+```powershell
+# Virtual environment aanmaken
+python -m venv venv
+
+# Activeren
+.\venv\Scripts\Activate.ps1
+
+# Packages installeren
 pip install -r requirements.txt
 
-# Install as CLI tool
+# Verifieer dat alles werkt
+python -c "import click; import google.genai; print('OK!')"
+```
+
+### macOS / Linux
+
+```bash
+# Virtual environment aanmaken
+python -m venv venv
+source venv/bin/activate
+
+# Packages installeren
+pip install -r requirements.txt
+
+# (Optioneel) Installeer als CLI tool
 pip install -e .
 ```
 
 ## Setup
 
-Create a `.env` file with your Gemini API key:
+Maak een `.env` bestand aan met je Gemini API key:
 
-```bash
+```
 GEMINI_API_KEY=your_api_key_here
 ```
+
+**Let op:** Gebruik `GEMINI_API_KEY`, niet `GOOGLE_API_KEY`.
 
 ## Usage
 

@@ -38,25 +38,31 @@ def write_item_xml(item: OrderItem) -> str:
     if item.surface_treatment:
         lines.append(f"      <SurfaceTreatment>{escape_xml(item.surface_treatment)}</SurfaceTreatment>")
 
-    # Holes
+    # Holes - only show tapped holes or holes with real tolerances
     if item.holes:
-        lines.append("      <Holes>")
-        for hole in item.holes:
-            attrs = []
-            if hole.count is not None:
-                attrs.append(f'count="{hole.count}"')
-            if hole.type:
-                attrs.append(f'type="{escape_xml(hole.type)}"')
-            if hole.diameter:
-                attrs.append(f'diameter="{escape_xml(hole.diameter)}"')
-            if hole.thread_size:
-                attrs.append(f'threadSize="{escape_xml(hole.thread_size)}"')
-            if hole.tolerance:
-                attrs.append(f'tolerance="{escape_xml(hole.tolerance)}"')
+        relevant_holes = [
+            h for h in item.holes
+            if h.type == "tapped"
+            or (h.tolerance and h.tolerance not in ["None", "null", ""])
+        ]
+        if relevant_holes:
+            lines.append("      <Holes>")
+            for hole in relevant_holes:
+                attrs = []
+                if hole.count is not None:
+                    attrs.append(f'count="{hole.count}"')
+                if hole.type:
+                    attrs.append(f'type="{escape_xml(hole.type)}"')
+                if hole.diameter and hole.diameter not in ["None", "null", ""]:
+                    attrs.append(f'diameter="{escape_xml(hole.diameter)}"')
+                if hole.thread_size and hole.thread_size not in ["None", "null", ""]:
+                    attrs.append(f'threadSize="{escape_xml(hole.thread_size)}"')
+                if hole.tolerance and hole.tolerance not in ["None", "null", ""]:
+                    attrs.append(f'tolerance="{escape_xml(hole.tolerance)}"')
 
-            attrs_str = " ".join(attrs)
-            lines.append(f"        <Hole {attrs_str}/>")
-        lines.append("      </Holes>")
+                attrs_str = " ".join(attrs)
+                lines.append(f"        <Hole {attrs_str}/>")
+            lines.append("      </Holes>")
 
     # Tolerated Lengths
     if item.tolerated_lengths:

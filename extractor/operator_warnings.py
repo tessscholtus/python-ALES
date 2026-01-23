@@ -54,7 +54,7 @@ def group_tapped_holes(holes: list[dict[str, Any]]) -> str:
     for hole in holes:
         size = hole.get("threadSize") or hole.get("thread_size") or "Unknown"
         tolerance = hole.get("tolerance", "")
-        if tolerance and tolerance != "None":
+        if tolerance and tolerance not in ["None", "null", ""]:
             key = f"{size} ({tolerance})"
         else:
             key = size
