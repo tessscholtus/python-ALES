@@ -9,7 +9,7 @@ from .constants import DEFAULT_GEMINI_MODEL
 class HoleDetails(BaseModel):
     """Details of a hole in the drawing."""
     count: Optional[int] = None
-    type: Optional[Literal["normal", "tapped", "reamed", "pilot"]] = None
+    type: Optional[str] = None  # Was Literal, but LLM may return other values like "threaded", "drilled"
     diameter: Optional[str] = None
     thread_size: Optional[str] = Field(None, alias="threadSize")
     tolerance: Optional[str] = None

@@ -272,6 +272,7 @@ async def extract_order_details_from_pdf(
             temperature=0.0,
             top_p=1.0,
             top_k=1,
+            max_output_tokens=8192,
         ),
     )
 
