@@ -61,6 +61,19 @@ class OrderItem(BaseModel):
     # Extra fields for XML output
     description: Optional[str] = None
     quantity: Optional[int] = None
+    # Status field for failed extractions
+    status: Optional[Literal["SUCCESS", "FAILED"]] = None
+
+    class Config:
+        populate_by_name = True
+
+
+class ProcessingMetadata(BaseModel):
+    """Metadata about the batch processing run."""
+    total_pdfs: int = Field(alias="totalPDFs")
+    successful_pdfs: int = Field(alias="successfulPDFs")
+    failed_pdfs: int = Field(alias="failedPDFs")
+    detected_customer: Optional[str] = Field(None, alias="detectedCustomer")
 
     class Config:
         populate_by_name = True
@@ -76,6 +89,8 @@ class OrderDetails(BaseModel):
     drawing_number: Optional[str] = Field(None, alias="drawingNumber")
     drawing_title: Optional[str] = Field(None, alias="drawingTitle")
     customer_name: Optional[str] = Field(None, alias="customerName")
+    # Processing metadata
+    metadata: Optional[ProcessingMetadata] = None
 
     class Config:
         populate_by_name = True

@@ -14,6 +14,7 @@ python_version/
 │   ├── prompt_builder.py     # Dynamische prompt generatie
 │   ├── operator_warnings.py  # Waarschuwingen voor operators
 │   ├── xml_writer.py         # XML output formatting
+│   ├── csv_logger.py         # Dagelijkse CSV logging
 │   ├── config_loader.py      # YAML configuratie management
 │   ├── customer_detection.py # Vision-based klant auto-detectie
 │   ├── types.py              # Pydantic models
@@ -28,6 +29,8 @@ python_version/
 │       └── rademaker/
 │           ├── config.yaml
 │           └── surface-treatments.yaml
+├── logs/                      # Dagelijkse CSV logs
+│   └── pdf_extractor_log_YYYY-MM-DD.csv
 ├── requirements.txt
 ├── setup.py
 └── .env                      # API key (NIET COMMITTEN!)
@@ -58,14 +61,55 @@ python -m extractor.main /path/to/pdfs --customer rademaker
 
 ## Output
 
-**Alleen XML output** - bestandsnaam is gebaseerd op de input mapnaam:
+### XML Output
 
-```
-input_folder/           ← De map met PDFs die je inlaadt
-└── PDF_XML_<MAPNAAM>.xml   ← Output XML in dezelfde map
+Bestandsnaam is gebaseerd op de input mapnaam: `PDF_XML_<MAPNAAM>.xml`
+
+De XML bevat nu een **Metadata sectie** bovenaan met:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Order>
+  <Metadata>
+    <TotalPDFs>20</TotalPDFs>
+    <SuccessfulPDFs>18</SuccessfulPDFs>
+    <FailedPDFs>2</FailedPDFs>
+    <DetectedCustomer>ELTEN</DetectedCustomer>
+  </Metadata>
+  <Items>
+    <Item>
+      <PartNumber>MD-22-08803_2</PartNumber>
+      <Status>FAILED</Status>
+    </Item>
+    <!-- Succesvolle items met alle data -->
+  </Items>
+</Order>
 ```
 
-Voorbeeld: Als je map `10009043_1` heet → output is `PDF_XML_10009043_1.xml`
+**Let op:** Gefaalde PDFs worden bovenaan de Items lijst getoond met alleen `<PartNumber>` en `<Status>FAILED</Status>`.
+
+### Dagelijkse CSV Log
+
+Locatie: `logs/pdf_extractor_log_YYYY-MM-DD.csv`
+
+Bevat per PDF:
+- Timestamp
+- Order naam
+- PDF naam
+- Status (SUCCESS/FAILED)
+- Verwerkingstijd in seconden
+- Foutmelding (bij FAILED)
+- Gedetecteerde klant
+
+Voorbeeld:
+
+```csv
+Timestamp,Order,PDF,Status,Time(s),Error,Customer
+2026-02-05 09:15:32,20260231,MD-22-08803_2,SUCCESS,18.3,,ELTEN
+2026-02-05 09:15:51,20260231,10015086_1,FAILED,45.2,MAX_TOKENS exceeded,ELTEN
+```
+
+Dit bestand wordt aangevuld bij elke run en is bedoeld voor analyse/leren van het model
 
 ---
 

@@ -13,6 +13,7 @@ Usage:
 import asyncio
 import random
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -30,9 +31,10 @@ from rich.progress import (
 )
 
 from .constants import DEFAULT_GEMINI_MODEL
+from .csv_logger import log_pdf_result
 from .customer_detection import detect_customer_from_pdf_vision
 from .gemini_service import extract_order_details_from_pdf, read_pdf_as_base64
-from .types import ExtractionOptions, OrderDetails, OrderItem
+from .types import ExtractionOptions, OrderDetails, OrderItem, ProcessingMetadata
 from .xml_writer import build_simple_order_xml
 
 # Load environment variables
@@ -279,8 +281,10 @@ async def extract_batch(
     console.print(f"\n[blue]Processing {len(pdf_files)} PDFs...[/blue]")
 
     all_items: list[OrderItem] = []
+    failed_items: list[OrderItem] = []
     success_count = 0
     fail_count = 0
+    detected_customer_name = customer_id.upper()
 
     with Progress(
         SpinnerColumn(),
@@ -300,6 +304,10 @@ async def extract_batch(
             # Check circuit breaker
             await circuit_breaker_check()
 
+            # Track time per PDF
+            start_time = time.time()
+            error_msg = ""
+
             try:
                 options = ExtractionOptions(
                     customer_id=customer_id,
@@ -310,32 +318,78 @@ async def extract_batch(
                 async with _failure_lock:
                     consecutive_failures = 0  # Reset on success
 
+                elapsed_time = time.time() - start_time
+
                 if data.items:
                     all_items.extend(data.items)
                     success_count += 1
                     # Update description to show last success
                     progress.update(task_id, description=f"Processing... (Last: [green]{pdf_name}[/green])")
+                    # Log success to CSV
+                    log_pdf_result(
+                        order_name=pdfs_folder.name,
+                        pdf_name=pdf_name,
+                        status="SUCCESS",
+                        elapsed_time=elapsed_time,
+                        error="",
+                        customer=detected_customer_name,
+                    )
                 else:
                     fail_count += 1
+                    # Add as failed item
+                    failed_items.append(OrderItem(part_number=pdf_name, status="FAILED"))
                     progress.update(task_id, description=f"Processing... (Last: [yellow]{pdf_name} - Empty[/yellow])")
+                    # Log empty response as failure
+                    log_pdf_result(
+                        order_name=pdfs_folder.name,
+                        pdf_name=pdf_name,
+                        status="FAILED",
+                        elapsed_time=elapsed_time,
+                        error="Empty response",
+                        customer=detected_customer_name,
+                    )
 
                 # Rate limiting: 1 second between PDFs
                 if i < len(pdf_files) - 1:
                     await asyncio.sleep(1)
 
             except Exception as e:
+                elapsed_time = time.time() - start_time
+                error_msg = str(e)
                 async with _failure_lock:
                     consecutive_failures += 1
                 fail_count += 1
+                # Add as failed item
+                failed_items.append(OrderItem(part_number=pdf_name, status="FAILED"))
                 console.print(f"[red]Error extracting {pdf_name}: {e}[/red]")
                 progress.update(task_id, description=f"Processing... (Last: [red]Error {pdf_name}[/red])")
-            
+                # Log failure to CSV
+                log_pdf_result(
+                    order_name=pdfs_folder.name,
+                    pdf_name=pdf_name,
+                    status="FAILED",
+                    elapsed_time=elapsed_time,
+                    error=error_msg,
+                    customer=detected_customer_name,
+                )
+
             progress.advance(task_id)
 
-    # Create combined order
-    combined_order = OrderDetails(items=all_items)
+    # Create metadata
+    metadata = ProcessingMetadata(
+        total_pdfs=len(pdf_files),
+        successful_pdfs=success_count,
+        failed_pdfs=fail_count,
+        detected_customer=detected_customer_name,
+    )
 
-    # Detect assembly
+    # Combine failed items first, then successful items
+    combined_items = failed_items + all_items
+
+    # Create combined order with metadata
+    combined_order = OrderDetails(items=combined_items, metadata=metadata)
+
+    # Detect assembly (only from successful items)
     assembly_part_number = detect_assembly(all_items)
 
     # Re-extract assembly in BOM-only mode if detected

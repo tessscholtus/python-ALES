@@ -27,6 +27,12 @@ def write_item_xml(item: OrderItem) -> str:
     if item.part_number:
         lines.append(f"      <PartNumber>{escape_xml(item.part_number)}</PartNumber>")
 
+    # If this is a failed item, only show PartNumber and Status
+    if item.status == "FAILED":
+        lines.append("      <Status>FAILED</Status>")
+        lines.append("    </Item>")
+        return "\n".join(lines)
+
     lines.append(f"      <Description>{escape_xml(item.description or '')}</Description>")
 
     if item.quantity is not None:
@@ -132,6 +138,16 @@ def build_simple_order_xml(data: OrderDetails) -> str:
     parts: list[str] = []
     parts.append('<?xml version="1.0" encoding="UTF-8"?>')
     parts.append("<Order>")
+
+    # Add metadata section if present
+    if data.metadata:
+        parts.append("  <Metadata>")
+        parts.append(f"    <TotalPDFs>{data.metadata.total_pdfs}</TotalPDFs>")
+        parts.append(f"    <SuccessfulPDFs>{data.metadata.successful_pdfs}</SuccessfulPDFs>")
+        parts.append(f"    <FailedPDFs>{data.metadata.failed_pdfs}</FailedPDFs>")
+        if data.metadata.detected_customer:
+            parts.append(f"    <DetectedCustomer>{escape_xml(data.metadata.detected_customer)}</DetectedCustomer>")
+        parts.append("  </Metadata>")
 
     if data.drawing_number:
         parts.append(f"  <DrawingNumber>{escape_xml(data.drawing_number)}</DrawingNumber>")
