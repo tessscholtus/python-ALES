@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="nl">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description"
+    content="AI Doel PDF Extractor — Van technische tekening naar productiedata in seconden. Bekijk wat mogelijk is met AI-gestuurde documentverwerking.">
+  <title>AI Document Tools — AI Doel</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="https://aidoel.nl" class="nav-logo">
+        <div class="nav-logo-icon">AD</div>
+        <span class="nav-logo-text">AI Doel</span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#process">Hoe het werkt</a></li>
+        <li><a href="#demo">Live Demo</a></li>
+        <li><a href="#features">Mogelijkheden</a></li>
+        <li><a href="#detection">Klantherkenning</a></li>
+        <li><a href="#stats">Resultaten</a></li>
+      </ul>
+      <a href="#contact" class="nav-cta">Neem contact op</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero" id="hero">
+    <div class="hero-badge fade-in">
+      <span class="hero-badge-dot"></span>
+      <span class="hero-badge-text">AI-gestuurde documentverwerking</span>
+    </div>
+    <h1 class="fade-in fade-in-delay-1">
+      Van technische tekening naar productiedata in seconden.
+    </h1>
+    <p class="hero-description fade-in fade-in-delay-2">
+      Onze AI leest technische tekeningen automatisch uit en extraheert alle relevante productiedata — onderdeelnummers,
+      gaten, toleranties, materialen en meer.
+    </p>
+    <div class="hero-actions fade-in fade-in-delay-3">
+      <a href="#demo" class="btn-primary">
+        Bekijk hoe het werkt
+        <i data-lucide="arrow-right" style="width: 20px; height: 20px;"></i>
+      </a>
+      <a href="#features" class="btn-secondary">
+        Mogelijkheden
+      </a>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Process Flow -->
+  <section class="process" id="process">
+    <div class="section-inner">
+      <span class="section-label fade-in">HOE HET WERKT</span>
+      <h2 class="section-title fade-in fade-in-delay-1">Vier stappen, volledig automatisch</h2>
+      <p class="section-subtitle fade-in fade-in-delay-2">
+        Van PDF-upload tot kant-en-klare productiedata, zonder handmatig overtypen.
+      </p>
+      <div class="process-steps">
+        <div class="process-step fade-in fade-in-delay-1">
+          <div class="process-step-number">01</div>
+          <h3>PDF Uploaden</h3>
+          <p>Technische tekeningen als PDF aanleveren — enkel of als batch van een hele order.</p>
+        </div>
+        <div class="process-step fade-in fade-in-delay-2">
+          <div class="process-step-number">02</div>
+          <h3>AI Analyse</h3>
+          <p>Gemini AI Vision analyseert elke tekening: dimensies, gaten, materiaal, oppervlaktebehandelingen.</p>
+        </div>
+        <div class="process-step fade-in fade-in-delay-3">
+          <div class="process-step-number">03</div>
+          <h3>Data Extractie</h3>
+          <p>Gestructureerde data wordt geëxtraheerd met automatische validatie en operator-waarschuwingen.</p>
+        </div>
+        <div class="process-step fade-in fade-in-delay-4">
+          <div class="process-step-number">04</div>
+          <h3>XML Output</h3>
+          <p>Kant-en-klare XML output, direct importeerbaar in uw ERP- of productiesysteem.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Customer Detection -->
+  <section class="detection" id="detection">
+    <div class="section-inner">
+      <span class="section-label fade-in">KLANTHERKENNING</span>
+      <h2 class="section-title fade-in fade-in-delay-1">Automatische klantdetectie</h2>
+      <p class="section-subtitle fade-in fade-in-delay-2">
+        Het systeem herkent automatisch voor welke klant de tekening is en past de configuratie aan. Per klant worden
+        specifieke regels geladen voor oppervlaktebehandelingen, materialen en waarschuwingen.
+      </p>
+      <div class="detection-demo fade-in fade-in-delay-3">
+        <div class="detection-flow">
+          <div class="detection-step">
+            <div class="detection-step-icon"><i data-lucide="file-text"></i></div>
+            <h4>PDF Invoer</h4>
+            <p>Eerste pagina van de order wordt geanalyseerd</p>
+          </div>
+          <div class="detection-arrow">→</div>
+          <div class="detection-step">
+            <div class="detection-step-icon"><i data-lucide="scan-eye"></i></div>
+            <h4>Vision AI</h4>
+            <p>BOM-tabel en titelblok worden visueel gelezen door AI</p>
+          </div>
+          <div class="detection-arrow">→</div>
+          <div class="detection-step">
+            <div class="detection-step-icon"><i data-lucide="zap"></i></div>
+            <h4>Klant Herkend</h4>
+            <p>Klantnaam gevonden, specifieke config wordt geladen</p>
+          </div>
+          <div class="detection-arrow">→</div>
+          <div class="detection-step">
+            <div class="detection-step-icon"><i data-lucide="check-circle"></i></div>
+            <h4>Config Actief</h4>
+            <p>Klant-specifieke regels voor extractie en waarschuwingen</p>
+          </div>
+        </div>
+        <div class="detection-result">
+          <div class="detection-badge active">
+            <i data-lucide="building-2" style="width:18px;height:18px;"></i> AI Doel — Herkend
+          </div>
+          <div class="detection-badge active">
+            <i data-lucide="building-2" style="width:18px;height:18px;"></i> Klant B — Herkend
+          </div>
+          <div class="detection-badge configurable">
+            <i data-lucide="plus-circle" style="width:18px;height:18px;"></i> Uw klant — Configureerbaar
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Mock Demo -->
+  <section class="demo" id="demo">
+    <div class="section-inner">
+      <span class="section-label fade-in">LIVE VOORBEELD</span>
+      <h2 class="section-title fade-in fade-in-delay-1">Zie het resultaat in real-time</h2>
+      <p class="section-subtitle fade-in fade-in-delay-2">
+        Een technische tekening gaat erin, gestructureerde productiedata komt eruit — inclusief automatische
+        klantherkenning.
+      </p>
+      <div class="demo-container fade-in fade-in-delay-3">
+        <!-- Input Panel -->
+        <div class="demo-panel demo-input">
+          <div class="demo-panel-header">
+            <div class="demo-panel-dots">
+              <span class="demo-panel-dot"></span>
+              <span class="demo-panel-dot"></span>
+              <span class="demo-panel-dot"></span>
+            </div>
+            <span class="demo-panel-title">AD-2026-00147.pdf</span>
+          </div>
+          <div class="demo-panel-body">
+            <img src="assets/technical-drawing.png"
+              alt="Technische tekening — Mounting Plate AD-2026-00147 voor AI Doel">
+          </div>
+        </div>
+
+        <!-- Arrow -->
+        <div class="demo-arrow">
+          <div class="demo-arrow-icon">→</div>
+          <span class="demo-arrow-label">AI ANALYSE</span>
+        </div>
+
+        <!-- Output Panel -->
+        <div class="demo-panel demo-output">
+          <div class="demo-panel-header">
+            <div class="demo-panel-dots">
+              <span class="demo-panel-dot"></span>
+              <span class="demo-panel-dot"></span>
+              <span class="demo-panel-dot"></span>
+            </div>
+            <span class="demo-panel-title">PDF_XML_output.xml</span>
+          </div>
+          <div class="demo-panel-body" id="xml-output">
+            <!-- XML lines will be populated by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Features -->
+  <section class="features" id="features">
+    <div class="section-inner">
+      <span class="section-label fade-in">MOGELIJKHEDEN</span>
+      <h2 class="section-title fade-in fade-in-delay-1">U bepaalt wat u eruit wilt extraheren</h2>
+      <p class="features-intro fade-in fade-in-delay-2">
+        De AI is volledig configureerbaar per klant. U kiest welke data relevant is voor uw productieproces. Enkele
+        voorbeelden van wat er geëxtraheerd kan worden:
+      </p>
+      <div class="features-grid fade-in fade-in-delay-3">
+        <div class="feature-card">
+          <div class="feature-icon"><i data-lucide="hash"></i></div>
+          <h3>Onderdeelnummers</h3>
+          <p>Automatische herkenning van part numbers, revisienummers en artikelcodes uit het titelblok.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><i data-lucide="circle-dot"></i></div>
+          <h3>Gaten & Toleranties</h3>
+          <p>Detectie van boorgaten, tapgaten (M4, M6, M8), doorvoergaten en bijbehorende toleranties.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><i data-lucide="wrench"></i></div>
+          <h3>Materialen</h3>
+          <p>Herkenning van materiaalsoorten zoals S235JR, RVS 304, aluminium en specificaties.</p>
+        </div>
+      </div>
+      <div class="features-grid features-grid--row2 fade-in fade-in-delay-4">
+        <div class="feature-card">
+          <div class="feature-icon"><i data-lucide="paintbrush"></i></div>
+          <h3>Oppervlaktebehandelingen</h3>
+          <p>Identificatie van coatings: powdercoating, verzinken, parelstralen, anodiseren en RAL-kleuren.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><i data-lucide="alert-triangle"></i></div>
+          <h3>Operator Waarschuwingen</h3>
+          <p>Automatische waarschuwingen voor tapgaten, kritieke dimensies en speciale bewerkingen.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><i data-lucide="ruler"></i></div>
+          <h3>Afmetingen & Buigingen</h3>
+          <p>Extractie van hoofd-afmetingen, plaatdiktes, radii en geometrische specificaties.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Stats -->
+  <section class="stats" id="stats">
+    <div class="section-inner">
+      <span class="section-label fade-in">BENCHMARK RESULTATEN</span>
+      <h2 class="section-title fade-in fade-in-delay-1">Bewezen prestaties</h2>
+      <p class="section-subtitle fade-in fade-in-delay-2">
+        Getest op 67 echte technische tekeningen uit 6 verschillende orders.
+      </p>
+      <div class="stats-grid">
+        <div class="stat-card fade-in fade-in-delay-1">
+          <div class="stat-value" data-target="100" data-suffix="%">0%</div>
+          <div class="stat-label">Accuraatheid</div>
+          <div class="stat-sublabel">Geen fouten in benchmark</div>
+        </div>
+        <div class="stat-card fade-in fade-in-delay-2">
+          <div class="stat-value" data-target="22.8" data-suffix="s" data-decimals="1">0s</div>
+          <div class="stat-label">Per tekening</div>
+          <div class="stat-sublabel">Gemiddelde verwerkingstijd</div>
+        </div>
+        <div class="stat-card fade-in fade-in-delay-3">
+          <div class="stat-value" data-target="0.07" data-prefix="€" data-decimals="2">€0</div>
+          <div class="stat-label">Kosten per PDF</div>
+          <div class="stat-sublabel">Met Gemini 2.5 Pro</div>
+        </div>
+        <div class="stat-card fade-in fade-in-delay-4">
+          <div class="stat-value" data-target="67" data-suffix="">0</div>
+          <div class="stat-label">PDFs getest</div>
+          <div class="stat-sublabel">Uit 6 orders, 2 klanten</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- CTA -->
+  <section class="cta" id="contact">
+    <h2 class="fade-in">Benieuwd wat AI voor uw bedrijf kan betekenen?</h2>
+    <p class="fade-in fade-in-delay-1">
+      Neem vrijblijvend contact op. We laten u graag zien wat er mogelijk is.
+    </p>
+    <a href="mailto:info@aidoel.nl" class="cta-button fade-in fade-in-delay-2">
+      Start het gesprek
+      <i data-lucide="arrow-right" style="width: 20px; height: 20px;"></i>
+    </a>
+    <p class="cta-trust fade-in fade-in-delay-3">Geen verplichtingen · Gratis eerste gesprek · Direct resultaat</p>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <div class="footer-brand-icon">AD</div>
+        <span class="footer-brand-text">AI Doel</span>
+      </div>
+      <p>© 2026 AI Doel — Dick & Tess Scholtus</p>
+    </div>
+  </footer>
+
+  <script>lucide.createIcons();</script>
+  <script src="script.js"></script>
+</body>
+
+</html>
