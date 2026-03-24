@@ -33,3 +33,8 @@ test_samples/
 
 # Logs
 *.log
+logs/
+
+# Test PDFs and output XMLs
+*.pdf
+PDF_XML_*.xml

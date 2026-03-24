@@ -1,6 +1,5 @@
 """Configuration loader with YAML support and deep merging."""
 
-import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -38,7 +37,7 @@ class SurfaceTreatments(BaseModel):
 class Signals(BaseModel):
     """Signal patterns for extraction."""
     tolerated_lengths: list[ToleratedLengthSignal] = Field(
-        default_factory=list, alias="tolerated_lengths"
+        default_factory=list
     )
     holes: list[HoleSignal] = []
 
@@ -89,10 +88,9 @@ def find_config_root() -> Path:
     """Find the config root directory."""
     # Check multiple possible locations
     possible_paths = [
+        Path(__file__).parent.parent / "config",
         Path.cwd() / "config",
         Path.cwd() / "python_version" / "config",
-        Path(__file__).parent.parent / "config",
-        Path.cwd() / "public" / "config",  # Original TypeScript location
     ]
 
     for path in possible_paths:

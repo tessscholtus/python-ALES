@@ -35,7 +35,7 @@ class ToleratedLength(BaseModel):
 
 
 class TextSignal(BaseModel):
-    """OCR hint (deprecated, kept for reference)."""
+    """OCR hint signal detected in PDF text."""
     category: str  # Was Literal, but models may return other values
     raw_value: str = Field(default="", alias="rawValue")
     page: Optional[int] = None

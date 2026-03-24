@@ -35,13 +35,19 @@ from .csv_logger import log_pdf_result
 from .customer_detection import detect_customer_from_pdf_vision
 from .gemini_service import extract_order_details_from_pdf, read_pdf_as_base64
 from .types import ExtractionOptions, OrderDetails, OrderItem, ProcessingMetadata
+from .utils import setup_environment
 from .xml_writer import build_simple_order_xml
 
-# Load environment variables
+# One-time environment setup (removes GOOGLE_API_KEY conflict warning)
 load_dotenv()
+setup_environment()
 
 console = Console()
 
+
+# ---------------------------------------------------------------------------
+# Retry logic
+# ---------------------------------------------------------------------------
 
 async def process_with_retry(
     pdf_base64: str,
@@ -49,17 +55,17 @@ async def process_with_retry(
     max_retries: int = 7,
 ) -> OrderDetails:
     """
-    Process PDF with exponential backoff retry on 503/429 errors.
+    Process a PDF with exponential backoff retry on 503/429 errors.
 
     Args:
         pdf_base64: Base64-encoded PDF content
         options: Extraction options
-        max_retries: Maximum number of retries
+        max_retries: Maximum number of retry attempts
 
     Returns:
         OrderDetails with extracted data
     """
-    delays = [2, 4, 8, 16, 30, 60, 60]  # seconds
+    delays = [2, 4, 8, 16, 30, 60, 60]  # seconds between retries
 
     for attempt in range(max_retries + 1):
         try:
@@ -76,9 +82,7 @@ async def process_with_retry(
                 raise
 
             delay = delays[attempt] if attempt < len(delays) else 60
-            jitter = random.random()  # 0-1 second random jitter
-            total_delay = delay + jitter
-
+            total_delay = delay + random.random()  # add 0–1s jitter
             console.print(
                 f"[yellow]API error (attempt {attempt + 1}/{max_retries + 1}), "
                 f"retrying in {total_delay:.1f}s...[/yellow]"
@@ -87,6 +91,53 @@ async def process_with_retry(
 
     raise RuntimeError("Max retries exceeded")
 
+
+# ---------------------------------------------------------------------------
+# Circuit breaker
+# ---------------------------------------------------------------------------
+
+class CircuitBreaker:
+    """
+    Pauses processing when too many consecutive failures occur,
+    giving the API time to recover before continuing.
+    """
+
+    def __init__(self, max_failures: int = 5, pause_seconds: int = 300):
+        self.max_failures = max_failures
+        self.pause_seconds = pause_seconds
+        self._failures = 0
+        self._lock = asyncio.Lock()
+
+    async def record_success(self) -> None:
+        async with self._lock:
+            self._failures = 0
+
+    async def record_failure(self) -> None:
+        async with self._lock:
+            self._failures += 1
+
+    async def check(self) -> None:
+        """Pause if the failure threshold has been reached."""
+        should_pause = False
+        async with self._lock:
+            if self._failures >= self.max_failures:
+                console.print(
+                    f"\n[red]CIRCUIT BREAKER: {self._failures} consecutive failures[/red]"
+                )
+                console.print(
+                    f"[yellow]Pausing for {self.pause_seconds // 60} minutes "
+                    f"to let API recover...[/yellow]\n"
+                )
+                self._failures = 0
+                should_pause = True
+
+        if should_pause:
+            await asyncio.sleep(self.pause_seconds)
+
+
+# ---------------------------------------------------------------------------
+# Single PDF extraction
+# ---------------------------------------------------------------------------
 
 async def extract_single_pdf(
     pdf_path: Path,
@@ -99,9 +150,9 @@ async def extract_single_pdf(
     Extract data from a single PDF.
 
     Args:
-        pdf_path: Path to PDF file
+        pdf_path: Path to the PDF file
         customer_id: Customer ID (elten, rademaker, base)
-        output_dir: Optional output directory
+        output_dir: Optional output directory override
         xml_path: Optional explicit XML output path
         model: Gemini model to use
 
@@ -131,44 +182,33 @@ async def extract_single_pdf(
         progress.add_task(description="Extracting with Gemini...", total=None)
         data = await process_with_retry(pdf_base64, options)
 
-    # Determine order name from first item's partNumber
-    order_name = (
-        data.items[0].part_number
-        if data.items and data.items[0].part_number
-        else pdf_name
-    )
-
-    # Determine output paths
-    # Format: PDF_XML_<folder_name>.xml (e.g., PDF_XML_20260001.xml)
+    # Determine output path: PDF_XML_<folder_name>.xml
     folder_name = pdf_path.parent.name
     xml_filename = f"PDF_XML_{folder_name}.xml"
-    
-    if output_dir:
+
+    if xml_path:
+        xml_out = xml_path
+    elif output_dir:
         output_dir.mkdir(parents=True, exist_ok=True)
         xml_out = output_dir / xml_filename
-    elif xml_path:
-        xml_out = xml_path
     else:
-        # Default: write XML in the same folder as the input PDF
         xml_out = pdf_path.parent / xml_filename
 
-    # Write XML
     xml_str = build_simple_order_xml(data)
-    with open(xml_out, "w", encoding="utf-8") as f:
-        f.write(xml_str)
-    
+    xml_out.write_text(xml_str, encoding="utf-8")
     console.print(f"[green]Wrote XML to {xml_out}[/green]")
 
     return data
 
 
+# ---------------------------------------------------------------------------
+# Assembly detection
+# ---------------------------------------------------------------------------
+
 def detect_assembly(items: list[OrderItem]) -> Optional[str]:
     """
-    Detect assembly drawing from multiple PDFs.
-    Assembly = PDF whose BOM references other PDFs in the order.
-
-    Args:
-        items: List of extracted items
+    Find the assembly drawing among extracted items.
+    An assembly is a PDF whose BOM references other PDFs in the same order.
 
     Returns:
         Part number of the assembly drawing, or None
@@ -180,7 +220,6 @@ def detect_assembly(items: list[OrderItem]) -> Optional[str]:
         if not item.bom_part_numbers:
             continue
 
-        # Check if BOM part numbers match other items' part numbers
         matches = [
             bom_part
             for bom_part in item.bom_part_numbers
@@ -201,27 +240,9 @@ def detect_assembly(items: list[OrderItem]) -> Optional[str]:
     return items[0].part_number if items else None
 
 
-# Circuit breaker state
-consecutive_failures = 0
-MAX_CONSECUTIVE_FAILURES = 5
-CIRCUIT_BREAKER_DELAY = 5 * 60  # 5 minutes
-_failure_lock = asyncio.Lock()
-
-
-async def circuit_breaker_check():
-    """Check circuit breaker and pause if needed."""
-    global consecutive_failures
-    async with _failure_lock:
-        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-            console.print(
-                f"\n[red]CIRCUIT BREAKER: {consecutive_failures} consecutive failures[/red]"
-            )
-            console.print(
-                f"[yellow]Pausing for {CIRCUIT_BREAKER_DELAY // 60} minutes to let API recover...[/yellow]\n"
-            )
-            await asyncio.sleep(CIRCUIT_BREAKER_DELAY)
-            consecutive_failures = 0
-
+# ---------------------------------------------------------------------------
+# Batch extraction
+# ---------------------------------------------------------------------------
 
 async def extract_batch(
     pdfs_folder: Path,
@@ -230,24 +251,21 @@ async def extract_batch(
     model: str = DEFAULT_GEMINI_MODEL,
 ) -> OrderDetails:
     """
-    Extract data from multiple PDFs in a folder.
+    Extract data from all PDFs in a folder.
 
     Args:
         pdfs_folder: Folder containing PDF files
         customer_id: Customer ID or "auto" for auto-detection
-        output_dir: Optional output directory
+        output_dir: Optional output directory override
         model: Gemini model to use
 
     Returns:
-        Combined OrderDetails
+        Combined OrderDetails for the entire batch
     """
-    global consecutive_failures
-
     if not pdfs_folder.exists():
         console.print(f"[red]Folder not found: {pdfs_folder}[/red]")
         sys.exit(1)
 
-    # Find all PDFs
     pdf_files = sorted(
         [f for f in pdfs_folder.iterdir() if f.suffix.lower() == ".pdf"],
         key=lambda x: x.name,
@@ -257,14 +275,12 @@ async def extract_batch(
         console.print(f"[red]No PDF files found in {pdfs_folder}[/red]")
         sys.exit(1)
 
-    # Determine output directory
     order_name = pdfs_folder.name
     if output_dir is None:
-        # Default: write XML in the same folder as the input PDFs
         output_dir = pdfs_folder
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Auto-detect customer from first PDF
+    # Auto-detect customer from the first PDF
     if customer_id == "auto":
         console.print("[blue]Auto-detecting customer from first PDF...[/blue]")
         first_pdf_base64 = read_pdf_as_base64(pdf_files[0])
@@ -276,7 +292,7 @@ async def extract_batch(
         )
         console.print(f"[dim]Reason: {detection.reason}[/dim]")
     else:
-        console.print(f"[blue]Using provided customer: {customer_id}[/blue]")
+        console.print(f"[blue]Using customer: {customer_id}[/blue]")
 
     console.print(f"\n[blue]Processing {len(pdf_files)} PDFs...[/blue]")
 
@@ -285,6 +301,7 @@ async def extract_batch(
     success_count = 0
     fail_count = 0
     detected_customer_name = customer_id.upper()
+    circuit_breaker = CircuitBreaker()
 
     with Progress(
         SpinnerColumn(),
@@ -301,12 +318,9 @@ async def extract_batch(
             pdf_name = pdf_file.stem
             pdf_base64 = read_pdf_as_base64(pdf_file)
 
-            # Check circuit breaker
-            await circuit_breaker_check()
+            await circuit_breaker.check()
 
-            # Track time per PDF
             start_time = time.time()
-            error_msg = ""
 
             try:
                 options = ExtractionOptions(
@@ -315,84 +329,80 @@ async def extract_batch(
                     model=model,
                 )
                 data = await process_with_retry(pdf_base64, options)
-                async with _failure_lock:
-                    consecutive_failures = 0  # Reset on success
+                await circuit_breaker.record_success()
 
-                elapsed_time = time.time() - start_time
+                elapsed = time.time() - start_time
 
                 if data.items:
                     all_items.extend(data.items)
                     success_count += 1
-                    # Update description to show last success
-                    progress.update(task_id, description=f"Processing... (Last: [green]{pdf_name}[/green])")
-                    # Log success to CSV
+                    progress.update(
+                        task_id,
+                        description=f"Processing... (Last: [green]{pdf_name}[/green])",
+                    )
                     log_pdf_result(
-                        order_name=pdfs_folder.name,
+                        order_name=order_name,
                         pdf_name=pdf_name,
                         status="SUCCESS",
-                        elapsed_time=elapsed_time,
+                        elapsed_time=elapsed,
                         error="",
                         customer=detected_customer_name,
                     )
                 else:
                     fail_count += 1
-                    # Add as failed item
                     failed_items.append(OrderItem(part_number=pdf_name, status="FAILED"))
-                    progress.update(task_id, description=f"Processing... (Last: [yellow]{pdf_name} - Empty[/yellow])")
-                    # Log empty response as failure
+                    progress.update(
+                        task_id,
+                        description=f"Processing... (Last: [yellow]{pdf_name} - Empty[/yellow])",
+                    )
                     log_pdf_result(
-                        order_name=pdfs_folder.name,
+                        order_name=order_name,
                         pdf_name=pdf_name,
                         status="FAILED",
-                        elapsed_time=elapsed_time,
+                        elapsed_time=elapsed,
                         error="Empty response",
                         customer=detected_customer_name,
                     )
 
-                # Rate limiting: 1 second between PDFs
+                # Rate limiting: 1 second between requests
                 if i < len(pdf_files) - 1:
                     await asyncio.sleep(1)
 
             except Exception as e:
-                elapsed_time = time.time() - start_time
-                error_msg = str(e)
-                async with _failure_lock:
-                    consecutive_failures += 1
+                elapsed = time.time() - start_time
+                await circuit_breaker.record_failure()
                 fail_count += 1
-                # Add as failed item
                 failed_items.append(OrderItem(part_number=pdf_name, status="FAILED"))
                 console.print(f"[red]Error extracting {pdf_name}: {e}[/red]")
-                progress.update(task_id, description=f"Processing... (Last: [red]Error {pdf_name}[/red])")
-                # Log failure to CSV
+                progress.update(
+                    task_id,
+                    description=f"Processing... (Last: [red]Error {pdf_name}[/red])",
+                )
                 log_pdf_result(
-                    order_name=pdfs_folder.name,
+                    order_name=order_name,
                     pdf_name=pdf_name,
                     status="FAILED",
-                    elapsed_time=elapsed_time,
-                    error=error_msg,
+                    elapsed_time=elapsed,
+                    error=str(e),
                     customer=detected_customer_name,
                 )
 
             progress.advance(task_id)
 
-    # Create metadata
+    # Build combined result with failed items first
     metadata = ProcessingMetadata(
         total_pdfs=len(pdf_files),
         successful_pdfs=success_count,
         failed_pdfs=fail_count,
         detected_customer=detected_customer_name,
     )
+    combined_order = OrderDetails(
+        items=failed_items + all_items,
+        metadata=metadata,
+    )
 
-    # Combine failed items first, then successful items
-    combined_items = failed_items + all_items
-
-    # Create combined order with metadata
-    combined_order = OrderDetails(items=combined_items, metadata=metadata)
-
-    # Detect assembly (only from successful items)
+    # Detect and re-extract assembly in BOM-only mode
     assembly_part_number = detect_assembly(all_items)
-
-    # Re-extract assembly in BOM-only mode if detected
     if assembly_part_number and len(pdf_files) > 1:
         assembly_pdf = next(
             (f for f in pdf_files if f.stem == assembly_part_number), None
@@ -413,38 +423,25 @@ async def extract_batch(
 
                 if assembly_data.items:
                     bom_data = assembly_data.items[0]
-                    # Smart merge: only take surface treatment and BOM part numbers from re-extraction
-                    # Keep original holes, tolerances, and other data from first extraction
-                    updated_items = []
+                    updated = []
                     for item in combined_order.items:
                         if item.part_number == assembly_part_number:
-                            # Check if re-extraction found a better surface treatment
-                            new_surface = bom_data.surface_treatment
-                            old_surface = item.surface_treatment
-                            # Use new surface treatment if original was None/empty
-                            if new_surface and new_surface.lower() not in ("none", ""):
-                                if not old_surface or old_surface.lower() in ("none", ""):
-                                    item.surface_treatment = new_surface
-                            # Also take BOM part numbers if found
+                            # Use re-extracted surface treatment if original was missing
+                            new_st = bom_data.surface_treatment
+                            if new_st and new_st.lower() not in ("none", ""):
+                                if not item.surface_treatment or item.surface_treatment.lower() in ("none", ""):
+                                    item.surface_treatment = new_st
+                            # Use re-extracted BOM part numbers if found
                             if bom_data.bom_part_numbers:
                                 item.bom_part_numbers = bom_data.bom_part_numbers
-                        updated_items.append(item)
-                    combined_order.items = updated_items
+                        updated.append(item)
+                    combined_order.items = updated
             except Exception as e:
-                console.print(
-                    f"[yellow]Assembly BOM-only re-extraction failed: {e}[/yellow]"
-                )
+                console.print(f"[yellow]Assembly re-extraction failed: {e}[/yellow]")
 
-    # Determine output filename based on input folder name
-    # Format: PDF_XML_<folder_name>.xml (e.g., PDF_XML_20260001.xml)
-    output_name = f"PDF_XML_{pdfs_folder.name}"
-
-    # Write XML only
-    xml_out = output_dir / f"{output_name}.xml"
-
-    xml_str = build_simple_order_xml(combined_order)
-    with open(xml_out, "w", encoding="utf-8") as f:
-        f.write(xml_str)
+    # Write XML output
+    xml_out = output_dir / f"PDF_XML_{pdfs_folder.name}.xml"
+    xml_out.write_text(build_simple_order_xml(combined_order), encoding="utf-8")
 
     console.print(f"\n[green]Done: {success_count} successful, {fail_count} failed[/green]")
     if assembly_part_number:
@@ -454,11 +451,15 @@ async def extract_batch(
     return combined_order
 
 
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
+
 @click.command()
 @click.argument("pdf_path", required=True, type=click.Path(exists=True))
 @click.option("--customer", "-c", default="elten", help="Customer ID (elten, rademaker, base, auto)")
 @click.option("--output", "-o", type=click.Path(), help="Output directory")
-@click.option("--xml", "xml_path", type=click.Path(), help="XML output path")
+@click.option("--xml", "xml_path", type=click.Path(), help="Explicit XML output path")
 @click.option("--model", "-m", default=DEFAULT_GEMINI_MODEL, help="Gemini model to use")
 def cli(
     pdf_path: str,
@@ -466,7 +467,7 @@ def cli(
     output: Optional[str],
     xml_path: Optional[str],
     model: str,
-):
+) -> None:
     """
     Extract manufacturing data from technical drawing PDFs.
 
@@ -480,26 +481,24 @@ def cli(
         pdf-extract /path/to/pdfs/
         pdf-extract /path/to/pdfs/ --customer auto
     """
-    pdf_path_obj = Path(pdf_path)
-    output_dir = Path(output) if output else None
+    path = Path(pdf_path)
+    out = Path(output) if output else None
 
-    if pdf_path_obj.is_dir():
-        # Batch mode - folder provided
+    if path.is_dir():
         asyncio.run(
             extract_batch(
-                pdfs_folder=pdf_path_obj,
+                pdfs_folder=path,
                 customer_id=customer,
-                output_dir=output_dir,
+                output_dir=out,
                 model=model,
             )
         )
     else:
-        # Single PDF mode
         asyncio.run(
             extract_single_pdf(
-                pdf_path=pdf_path_obj,
+                pdf_path=path,
                 customer_id=customer,
-                output_dir=output_dir,
+                output_dir=out,
                 xml_path=Path(xml_path) if xml_path else None,
                 model=model,
             )
