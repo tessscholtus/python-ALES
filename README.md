@@ -40,8 +40,8 @@ GEMINI_API_KEY=your_api_key_here
 Run:
 
 ```bash
-# single PDF
-pdf-extract drawing.pdf --customer elten
+# single PDF with auto customer detection
+pdf-extract drawing.pdf --customer auto
 
 # batch folder with auto customer detection
 pdf-extract /path/to/order_folder --customer auto
