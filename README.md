@@ -25,7 +25,7 @@ GEMINI_API_KEY=your_api_key_here
 
 ```bash
 pdf-extract drawing.pdf
-pdf-extract drawing.pdf --customer elten
+pdf-extract drawing.pdf --customer auto
 pdf-extract drawing.pdf --model gemini-2.5-pro
 ```
 
@@ -33,7 +33,7 @@ pdf-extract drawing.pdf --model gemini-2.5-pro
 
 ```bash
 pdf-extract /path/to/order_folder/ --customer auto
-pdf-extract /path/to/order_folder/ --customer elten
+pdf-extract /path/to/order_folder/ --customer auto
 pdf-extract /path/to/order_folder/ --customer auto --model gemini-2.5-pro
 ```
 
