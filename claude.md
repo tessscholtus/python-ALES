@@ -44,9 +44,6 @@ Unlike other frontier models that require image conversion, Gemini accepts raw P
 
 `*` = estimated from Google pricing
 
-Override via CLI: `--model gemini-2.0-flash`
-Default set in `extractor/constants.py`.
-
 ---
 
 ## AI / LLM Design
