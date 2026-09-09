@@ -15,7 +15,7 @@ import random
 import sys
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import click
 from dotenv import load_dotenv
@@ -30,10 +30,14 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 
-from .constants import DEFAULT_GEMINI_MODEL
+from .constants import (
+    DEEP_GEMINI_MODEL,
+    DEFAULT_MAX_RETRIES,
+    FAST_GEMINI_MODEL,
+)
 from .csv_logger import log_pdf_result
-from .customer_detection import detect_customer_from_pdf_vision
 from .gemini_service import extract_order_details_from_pdf, read_pdf_as_base64
+from .pdf_preflight import PdfPreflightResult, preflight_pdf
 from .types import ExtractionOptions, OrderDetails, OrderItem, ProcessingMetadata
 from .xml_writer import build_simple_order_xml
 
@@ -41,12 +45,13 @@ from .xml_writer import build_simple_order_xml
 load_dotenv()
 
 console = Console()
+ScanDepth = Literal["auto", "fast", "deep"]
 
 
 async def process_with_retry(
     pdf_base64: str,
     options: ExtractionOptions,
-    max_retries: int = 7,
+    max_retries: int = DEFAULT_MAX_RETRIES,
 ) -> OrderDetails:
     """
     Process PDF with exponential backoff retry on 503/429 errors.
@@ -59,7 +64,7 @@ async def process_with_retry(
     Returns:
         OrderDetails with extracted data
     """
-    delays = [2, 4, 8, 16, 30, 60, 60]  # seconds
+    delays = [2, 4]  # seconds
 
     for attempt in range(max_retries + 1):
         try:
@@ -88,12 +93,121 @@ async def process_with_retry(
     raise RuntimeError("Max retries exceeded")
 
 
+def normalize_customer_id(customer_id: str) -> str:
+    """Disable automatic customer detection while preserving explicit choices."""
+
+    normalized = customer_id.strip().lower()
+    if normalized == "auto":
+        console.print(
+            "[dim]Customer auto-detection is disabled; using base configuration.[/dim]"
+        )
+        return "base"
+    return normalized or "base"
+
+
+def select_model(
+    preflight: PdfPreflightResult,
+    scan_depth: ScanDepth,
+    requested_model: Optional[str],
+) -> str:
+    """Choose a fast model unless the caller or a large complex PDF asks for deep."""
+
+    if requested_model:
+        return requested_model
+    if scan_depth == "deep":
+        return DEEP_GEMINI_MODEL
+    if scan_depth == "auto" and preflight.route == "manual_review":
+        return DEEP_GEMINI_MODEL
+    if scan_depth == "auto" and preflight.complexity == "complex" and preflight.page_count > 3:
+        return DEEP_GEMINI_MODEL
+    return FAST_GEMINI_MODEL
+
+
+def is_sparse_extraction(data: OrderDetails) -> bool:
+    """Return True when vision found no useful manufacturing field at all."""
+
+    for item in data.items:
+        if any(
+            (
+                item.material,
+                item.surface_treatment,
+                item.description,
+                item.holes,
+                item.tolerated_lengths,
+                item.bom_part_numbers,
+                item.bom_items,
+                item.machining_operations,
+                item.technical_analysis,
+            )
+        ):
+            return False
+    return True
+
+
+async def extract_routed_pdf(
+    pdf_path: Path,
+    *,
+    customer_id: str,
+    scan_depth: ScanDepth = "auto",
+    requested_model: Optional[str] = None,
+) -> tuple[OrderDetails, PdfPreflightResult, str, float]:
+    """Run preflight and automatically choose the cheapest safe extraction route."""
+
+    preflight = preflight_pdf(pdf_path)
+    console.print(
+        f"[dim]Preflight: {preflight.kind}, route={preflight.route}, "
+        f"complexity={preflight.complexity}, {preflight.elapsed_ms:.0f} ms[/dim]"
+    )
+    console.print(f"[dim]Evidence: {preflight.evidence}[/dim]")
+
+    if preflight.kind in {"protected", "unreadable"}:
+        detail = f": {preflight.error}" if preflight.error else ""
+        raise ValueError(f"PDF requires manual review ({preflight.kind}){detail}")
+    if preflight.route == "skip":
+        console.print("[yellow]Skipping PDF: preflight found no visible content.[/yellow]")
+        return (
+            OrderDetails(items=[OrderItem(part_number=pdf_path.stem, status="FAILED")]),
+            preflight,
+            "none",
+            0.0,
+        )
+
+    selected_model = select_model(preflight, scan_depth, requested_model)
+    pdf_base64 = read_pdf_as_base64(pdf_path)
+    options = ExtractionOptions(
+        customer_id=customer_id,
+        pdf_filename=pdf_path.stem,
+        model=selected_model,
+    )
+    ai_started = time.perf_counter()
+    data = await process_with_retry(pdf_base64, options)
+
+    # No manual second command is required for outlined/raster PDFs. Auto mode
+    # escalates only when the fast visual pass returned no meaningful fields.
+    if (
+        scan_depth == "auto"
+        and selected_model != DEEP_GEMINI_MODEL
+        and preflight.needs_visual_scan
+        and is_sparse_extraction(data)
+    ):
+        console.print(
+            "[yellow]Fast visual result was empty; retrying once with the deep model.[/yellow]"
+        )
+        options.model = DEEP_GEMINI_MODEL
+        data = await process_with_retry(pdf_base64, options, max_retries=0)
+        selected_model = DEEP_GEMINI_MODEL
+
+    ai_time = time.perf_counter() - ai_started
+    return data, preflight, selected_model, ai_time
+
+
 async def extract_single_pdf(
     pdf_path: Path,
-    customer_id: str = "elten",
+    customer_id: str = "base",
     output_dir: Optional[Path] = None,
     xml_path: Optional[Path] = None,
-    model: str = DEFAULT_GEMINI_MODEL,
+    model: Optional[str] = None,
+    scan_depth: ScanDepth = "auto",
 ) -> OrderDetails:
     """
     Extract data from a single PDF.
@@ -103,7 +217,8 @@ async def extract_single_pdf(
         customer_id: Customer ID (elten, rademaker, base)
         output_dir: Optional output directory
         xml_path: Optional explicit XML output path
-        model: Gemini model to use
+        model: Optional Gemini model override
+        scan_depth: Automatic routing, forced fast, or forced deep
 
     Returns:
         OrderDetails with extracted data
@@ -112,30 +227,44 @@ async def extract_single_pdf(
         console.print(f"[red]PDF not found: {pdf_path}[/red]")
         sys.exit(1)
 
-    pdf_base64 = read_pdf_as_base64(pdf_path)
     pdf_name = pdf_path.stem
+    customer_id = normalize_customer_id(customer_id)
 
     console.print(f"[blue]Processing PDF: {pdf_name}[/blue]")
-
-    options = ExtractionOptions(
-        customer_id=customer_id,
-        pdf_filename=pdf_name,
-        model=model,
-    )
 
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        progress.add_task(description="Extracting with Gemini...", total=None)
-        data = await process_with_retry(pdf_base64, options)
+        progress.add_task(description="Preflight and extraction...", total=None)
+        started = time.perf_counter()
+        data, preflight, selected_model, ai_time = await extract_routed_pdf(
+            pdf_path,
+            customer_id=customer_id,
+            scan_depth=scan_depth,
+            requested_model=model,
+        )
+    console.print(f"[dim]Model used: {selected_model}[/dim]")
 
     # Determine order name from first item's partNumber
     order_name = (
         data.items[0].part_number
         if data.items and data.items[0].part_number
         else pdf_name
+    )
+    log_pdf_result(
+        order_name=order_name,
+        pdf_name=pdf_name,
+        status="SUCCESS" if any(item.status != "FAILED" for item in data.items) else "FAILED",
+        elapsed_time=time.perf_counter() - started,
+        error="",
+        customer=customer_id.upper(),
+        preflight_ms=preflight.elapsed_ms,
+        pdf_kind=preflight.kind,
+        route=preflight.route,
+        model=selected_model,
+        ai_time=ai_time,
     )
 
     # Determine output paths
@@ -204,39 +333,38 @@ def detect_assembly(items: list[OrderItem]) -> Optional[str]:
 # Circuit breaker state
 consecutive_failures = 0
 MAX_CONSECUTIVE_FAILURES = 5
-CIRCUIT_BREAKER_DELAY = 5 * 60  # 5 minutes
 _failure_lock = asyncio.Lock()
 
 
 async def circuit_breaker_check():
-    """Check circuit breaker and pause if needed."""
+    """Fail fast instead of blocking an interactive batch for five minutes."""
     global consecutive_failures
     async with _failure_lock:
         if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-            console.print(
-                f"\n[red]CIRCUIT BREAKER: {consecutive_failures} consecutive failures[/red]"
+            raise RuntimeError(
+                f"Circuit breaker open after {consecutive_failures} consecutive failures; "
+                "batch stopped without a five-minute foreground wait."
             )
-            console.print(
-                f"[yellow]Pausing for {CIRCUIT_BREAKER_DELAY // 60} minutes to let API recover...[/yellow]\n"
-            )
-            await asyncio.sleep(CIRCUIT_BREAKER_DELAY)
-            consecutive_failures = 0
 
 
 async def extract_batch(
     pdfs_folder: Path,
-    customer_id: str = "auto",
+    customer_id: str = "base",
     output_dir: Optional[Path] = None,
-    model: str = DEFAULT_GEMINI_MODEL,
+    model: Optional[str] = None,
+    scan_depth: ScanDepth = "auto",
+    assembly_recheck: bool = False,
 ) -> OrderDetails:
     """
     Extract data from multiple PDFs in a folder.
 
     Args:
         pdfs_folder: Folder containing PDF files
-        customer_id: Customer ID or "auto" for auto-detection
+        customer_id: Explicit customer ID; "auto" is treated as "base"
         output_dir: Optional output directory
-        model: Gemini model to use
+        model: Optional Gemini model override
+        scan_depth: Automatic routing, forced fast, or forced deep
+        assembly_recheck: Opt in to the legacy second assembly call
 
     Returns:
         Combined OrderDetails
@@ -264,19 +392,8 @@ async def extract_batch(
         output_dir = pdfs_folder
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Auto-detect customer from first PDF
-    if customer_id == "auto":
-        console.print("[blue]Auto-detecting customer from first PDF...[/blue]")
-        first_pdf_base64 = read_pdf_as_base64(pdf_files[0])
-        detection = await detect_customer_from_pdf_vision(first_pdf_base64)
-        customer_id = detection.customer
-        console.print(
-            f"[green]Detected customer: {customer_id.upper()} "
-            f"({detection.confidence} confidence)[/green]"
-        )
-        console.print(f"[dim]Reason: {detection.reason}[/dim]")
-    else:
-        console.print(f"[blue]Using provided customer: {customer_id}[/blue]")
+    customer_id = normalize_customer_id(customer_id)
+    console.print(f"[blue]Using customer configuration: {customer_id}[/blue]")
 
     console.print(f"\n[blue]Processing {len(pdf_files)} PDFs...[/blue]")
 
@@ -299,7 +416,6 @@ async def extract_batch(
 
         for i, pdf_file in enumerate(pdf_files):
             pdf_name = pdf_file.stem
-            pdf_base64 = read_pdf_as_base64(pdf_file)
 
             # Check circuit breaker
             await circuit_breaker_check()
@@ -309,22 +425,28 @@ async def extract_batch(
             error_msg = ""
 
             try:
-                options = ExtractionOptions(
+                data, preflight, selected_model, ai_time = await extract_routed_pdf(
+                    pdf_file,
                     customer_id=customer_id,
-                    pdf_filename=pdf_name,
-                    model=model,
+                    scan_depth=scan_depth,
+                    requested_model=model,
                 )
-                data = await process_with_retry(pdf_base64, options)
                 async with _failure_lock:
                     consecutive_failures = 0  # Reset on success
 
                 elapsed_time = time.time() - start_time
 
-                if data.items:
+                if data.items and any(item.status != "FAILED" for item in data.items):
                     all_items.extend(data.items)
                     success_count += 1
                     # Update description to show last success
-                    progress.update(task_id, description=f"Processing... (Last: [green]{pdf_name}[/green])")
+                    progress.update(
+                        task_id,
+                        description=(
+                            f"Processing... (Last: [green]{pdf_name}[/green], "
+                            f"{preflight.kind}, {selected_model})"
+                        ),
+                    )
                     # Log success to CSV
                     log_pdf_result(
                         order_name=pdfs_folder.name,
@@ -333,6 +455,11 @@ async def extract_batch(
                         elapsed_time=elapsed_time,
                         error="",
                         customer=detected_customer_name,
+                        preflight_ms=preflight.elapsed_ms,
+                        pdf_kind=preflight.kind,
+                        route=preflight.route,
+                        model=selected_model,
+                        ai_time=ai_time,
                     )
                 else:
                     fail_count += 1
@@ -345,13 +472,18 @@ async def extract_batch(
                         pdf_name=pdf_name,
                         status="FAILED",
                         elapsed_time=elapsed_time,
-                        error="Empty response",
+                        error=(
+                            "Preflight found no visible content"
+                            if selected_model == "none"
+                            else "Empty response"
+                        ),
                         customer=detected_customer_name,
+                        preflight_ms=preflight.elapsed_ms,
+                        pdf_kind=preflight.kind,
+                        route=preflight.route,
+                        model=selected_model,
+                        ai_time=ai_time,
                     )
-
-                # Rate limiting: 1 second between PDFs
-                if i < len(pdf_files) - 1:
-                    await asyncio.sleep(1)
 
             except Exception as e:
                 elapsed_time = time.time() - start_time
@@ -392,8 +524,8 @@ async def extract_batch(
     # Detect assembly (only from successful items)
     assembly_part_number = detect_assembly(all_items)
 
-    # Re-extract assembly in BOM-only mode if detected
-    if assembly_part_number and len(pdf_files) > 1:
+    # Optional legacy second call; disabled by default for predictable latency.
+    if assembly_recheck and assembly_part_number and len(pdf_files) > 1:
         assembly_pdf = next(
             (f for f in pdf_files if f.stem == assembly_part_number), None
         )
@@ -456,16 +588,37 @@ async def extract_batch(
 
 @click.command()
 @click.argument("pdf_path", required=True, type=click.Path(exists=True))
-@click.option("--customer", "-c", default="elten", help="Customer ID (elten, rademaker, base, auto)")
+@click.option(
+    "--customer",
+    "-c",
+    default="base",
+    show_default=True,
+    help="Explicit customer ID. 'auto' no longer calls customer detection and uses base.",
+)
 @click.option("--output", "-o", type=click.Path(), help="Output directory")
 @click.option("--xml", "xml_path", type=click.Path(), help="XML output path")
-@click.option("--model", "-m", default=DEFAULT_GEMINI_MODEL, help="Gemini model to use")
+@click.option("--model", "-m", default=None, help="Optional Gemini model override")
+@click.option(
+    "--scan-depth",
+    type=click.Choice(["auto", "fast", "deep"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help="Automatic preflight routing or an operator override.",
+)
+@click.option(
+    "--assembly-recheck",
+    is_flag=True,
+    default=False,
+    help="Opt in to the slower legacy second Gemini call for an assembly BOM.",
+)
 def cli(
     pdf_path: str,
     customer: str,
     output: Optional[str],
     xml_path: Optional[str],
-    model: str,
+    model: Optional[str],
+    scan_depth: ScanDepth,
+    assembly_recheck: bool,
 ):
     """
     Extract manufacturing data from technical drawing PDFs.
@@ -478,7 +631,7 @@ def cli(
     \b
     Batch mode (folder with PDFs):
         pdf-extract /path/to/pdfs/
-        pdf-extract /path/to/pdfs/ --customer auto
+        pdf-extract /path/to/pdfs/ --customer base
     """
     pdf_path_obj = Path(pdf_path)
     output_dir = Path(output) if output else None
@@ -491,6 +644,8 @@ def cli(
                 customer_id=customer,
                 output_dir=output_dir,
                 model=model,
+                scan_depth=scan_depth,
+                assembly_recheck=assembly_recheck,
             )
         )
     else:
@@ -502,6 +657,7 @@ def cli(
                 output_dir=output_dir,
                 xml_path=Path(xml_path) if xml_path else None,
                 model=model,
+                scan_depth=scan_depth,
             )
         )
 

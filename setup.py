@@ -13,6 +13,7 @@ setup(
         "pydantic>=2.0.0",
         "rich>=13.0.0",
         "click>=8.0.0",
+        "pypdf>=5.0.0",
     ],
     entry_points={
         "console_scripts": [

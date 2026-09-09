@@ -95,8 +95,15 @@ GEMINI_API_KEY=your_api_key_here
 # Basic usage (auto-detects output location)
 pdf-extract drawing.pdf
 
-# Specify customer
+# Specify customer explicitly (optional)
 pdf-extract drawing.pdf --customer elten
+
+# Automatic structural routing is the default
+pdf-extract drawing.pdf --scan-depth auto
+
+# Operator overrides for diagnostics or exceptional drawings
+pdf-extract drawing.pdf --scan-depth fast
+pdf-extract drawing.pdf --scan-depth deep
 
 # Custom output
 pdf-extract drawing.pdf --output results/
@@ -109,7 +116,7 @@ pdf-extract drawing.pdf --model gemini-2.5-pro
 ### Batch Processing
 
 ```bash
-# Process all PDFs in a folder (auto-detect customer)
+# Process all PDFs in a folder (base configuration by default)
 pdf-extract --batch /path/to/pdfs
 
 # Or use the batch subcommand
@@ -118,8 +125,8 @@ pdf-extract batch /path/to/pdfs
 # Specify customer
 pdf-extract batch /path/to/pdfs --customer rademaker
 
-# Auto-detect customer from first PDF
-pdf-extract batch /path/to/pdfs --customer auto
+# No customer detection call; base rules are used by default
+pdf-extract batch /path/to/pdfs --customer base
 
 # Custom output directory
 pdf-extract batch /path/to/pdfs --output results/
@@ -127,7 +134,7 @@ pdf-extract batch /path/to/pdfs --output results/
 
 ## Available Models
 
-- `gemini-2.5-flash` (default, fastest)
+- `gemini-2.5-flash` (default, fastest normal route)
 - `gemini-2.5-pro` (more accurate)
 - `gemini-1.5-flash`
 - `gemini-1.5-pro`
@@ -137,7 +144,7 @@ pdf-extract batch /path/to/pdfs --output results/
 - `elten` - ELTEN drawings with surface treatments (Parelstralen, Poedercoaten, Verzinken)
 - `rademaker` - Rademaker drawings
 - `base` - Generic extraction rules
-- `auto` - Auto-detect customer from BOM table (batch mode only)
+- `auto` - Compatibility alias for `base`; it does not call customer detection
 
 ## Output
 
@@ -180,20 +187,21 @@ python_version/
 ## Features
 
 - **Direct CLI**: `pdf-extract` command without npm/server
-- **Auto customer detection**: Vision-based detection from BOM table
-- **Retry logic**: Exponential backoff on API errors (503, 429)
-- **Circuit breaker**: Pause after 5 consecutive failures
+- **Fast PDF preflight**: Detects native text, raster scans, vector-outlined CAD and empty PDFs
+- **Automatic routing**: No second command is needed for raster or vector-outlined drawings
+- **Bounded retry logic**: At most two retries on API errors (503, 429)
+- **Fail-fast circuit breaker**: Stops instead of pausing the foreground job for five minutes
 - **Assembly detection**: Identifies assembly drawings in batch mode
+- **Single-pass assemblies by default**: The slower BOM recheck is opt-in with `--assembly-recheck`
 - **Rich output**: Progress spinners and colored console output
 
 ## Example
 
 ```bash
 # Analyze a batch of technical drawings
-$ pdf-extract /path/to/order_123/ --customer auto
+$ pdf-extract /path/to/order_123/ --customer base
 
-Auto-detecting customer from first PDF...
-Detected customer: ELTEN (high confidence)
+Using customer configuration: base
 Processing 5 PDFs...
 Done: 5 successful, 0 failed
 Output: /path/to/order_123/PDF_XML_order_123.xml

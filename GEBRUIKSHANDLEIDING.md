@@ -23,7 +23,7 @@ python -m extractor.main <PDF_OF_FOLDER> [opties]
 Verwerk één PDF bestand:
 
 ```bash
-# Basis (gebruikt default customer: elten, default model: gemini-2.5-pro)
+# Basis (customer: base, automatische preflight, snelle modelroute)
 python -m extractor.main tekening.pdf
 
 # Met specifieke klant
@@ -52,19 +52,18 @@ python -m extractor.main tekening.pdf -c rademaker -m gemini-3-flash-preview -o 
 Verwerk alle PDFs in een folder:
 
 ```bash
-# Met auto-detectie van klant (aanbevolen)
-python -m extractor.main /pad/naar/pdf_folder --customer auto
-python -m extractor.main /pad/naar/pdf_folder -c auto
+# Zonder klantdetectie (standaard en aanbevolen voor snelle verwerking)
+python -m extractor.main /pad/naar/pdf_folder --customer base
 
 # Met specifieke klant
 python -m extractor.main /pad/naar/pdf_folder --customer elten
 python -m extractor.main /pad/naar/pdf_folder --customer rademaker
 
 # Met specifiek model
-python -m extractor.main /pad/naar/pdf_folder -c auto -m gemini-3-flash-preview
+python -m extractor.main /pad/naar/pdf_folder -c base -m gemini-2.5-pro
 
 # Met custom output folder
-python -m extractor.main /pad/naar/pdf_folder -c auto -o /pad/naar/output
+python -m extractor.main /pad/naar/pdf_folder -c base -o /pad/naar/output
 ```
 
 ---
@@ -73,8 +72,10 @@ python -m extractor.main /pad/naar/pdf_folder -c auto -o /pad/naar/output
 
 | Optie | Kort | Beschrijving | Default |
 |-------|------|--------------|---------|
-| `--customer` | `-c` | Klant configuratie | `elten` |
-| `--model` | `-m` | Gemini model | `gemini-2.5-pro` |
+| `--customer` | `-c` | Expliciete klantconfiguratie | `base` |
+| `--model` | `-m` | Optionele Gemini-modeloverride | automatisch |
+| `--scan-depth` | - | `auto`, `fast` of `deep` | `auto` |
+| `--assembly-recheck` | - | Langzamere tweede assemblage-call | uit |
 | `--output` | `-o` | Output folder | `output/order_<naam>/` |
 | `--xml` | - | Specifiek XML pad | `<output>/<partnumber>.xml` |
 
@@ -82,30 +83,20 @@ python -m extractor.main /pad/naar/pdf_folder -c auto -o /pad/naar/output
 
 | Waarde | Beschrijving |
 |--------|--------------|
-| `auto` | **Aanbevolen** - Automatische detectie via Vision API |
+| `auto` | Compatibiliteitsalias voor `base`; doet geen Vision-call |
 | `elten` | ELTEN configuratie (forceer) |
 | `rademaker` | Rademaker configuratie (forceer) |
 | `base` | Basis configuratie (geen klant-specifieke regels) |
 
-#### Hoe werkt klantdetectie?
+#### Klantconfiguratie
 
-**`--customer auto` (Aanbevolen voor productie)**
-
-1. De eerste PDF wordt geanalyseerd door Gemini Vision
-2. Gemini zoekt naar klantnamen in de BOM tabel (rechtsonder)
-3. Bij detectie van "ELTEN" of "RADEMAKER" wordt de bijbehorende configuratie geladen
-4. Als geen klant gevonden wordt, valt het systeem terug op `base` configuratie
-
-**Wanneer `auto` gebruiken:**
-
-- Bij onbekende orders waar je de klant niet van tevoren weet
-- In productie-omgevingen waar tekeningen automatisch binnenkomen
-- Bij gemengde orders van verschillende klanten
+Automatische klantdetectie is uitgeschakeld om een extra Vision-call per batch
+te vermijden. Gebruik standaard `base`. Geef `elten` of `rademaker` alleen
+expliciet mee wanneer die informatie al uit order- of ERP-data bekend is.
 
 **Wanneer specifieke klant (`elten`/`rademaker`) gebruiken:**
 
 - Als je 100% zeker weet welke klant het is
-- Als auto-detectie een verkeerde klant detecteert
 - Voor testen met specifieke klant-configuraties
 
 #### YAML Configuraties
@@ -153,10 +144,10 @@ Deze configs bepalen:
 
 ### Aanbeveling
 
-**Gebruik `gemini-2.5-pro` (default)** voor productie:
-- Sneller (33% sneller dan Flash)
-- Geen hallucinaties bij tapgat detectie
-- Betrouwbaarder voor kritieke productie-informatie
+De normale route gebruikt `gemini-2.5-flash`. Gebruik `--scan-depth deep` of
+een expliciete modeloverride voor kritieke tekeningen die extra controle nodig
+hebben. De bovenstaande benchmark is historisch en betreft een andere
+Flash-preview; gebruik hem niet als actuele performancegarantie.
 
 **Overweeg `gemini-3-flash-preview`** alleen als:
 - Kosten belangrijker zijn dan 100% accuraatheid
@@ -243,16 +234,16 @@ python -m extractor.main /Users/tess/orders/rademaker_batch/ \
     --output /Users/tess/output/
 ```
 
-### Voorbeeld 3: Auto-detectie Klant
+### Voorbeeld 3: Basisconfiguratie zonder klantdetectie
 
 ```bash
-python -m extractor.main /Users/tess/orders/onbekende_order/ -c auto
+python -m extractor.main /Users/tess/orders/onbekende_order/ -c base
 ```
 
 ### Voorbeeld 4: Windows Paden
 
 ```cmd
-python -m extractor.main C:\Users\Naam\tekeningen\order_123 -c auto -o C:\output
+python -m extractor.main C:\Users\Naam\tekeningen\order_123 -c base -o C:\output
 ```
 
 ---
@@ -332,15 +323,15 @@ Controleer modelnaam:
 Gebruik quotes:
 
 ```bash
-python -m extractor.main "/Users/naam/My Documents/order folder" -c auto
+python -m extractor.main "/Users/naam/My Documents/order folder" -c base
 ```
 
 ---
 
 ## Tips
 
-1. **Gebruik `--customer auto`** voor batch orders - detecteert automatisch ELTEN/Rademaker
-2. **Gebruik `gemini-2.5-pro`** (default) voor hoogste accuraatheid
+1. **Gebruik standaard `base`**; haal een bekende klant bij voorkeur uit ERP
+2. **Gebruik `--scan-depth auto`**; forceer `deep` alleen wanneer nodig
 3. **Check de XML output** voor operator warnings (tapgaten, toleranties)
 4. **Assembly detectie** - het systeem detecteert automatisch welke PDF de assembly is
 5. **XML naamgeving** - De output heet `PDF_XML_<mapnaam>.xml` en staat in dezelfde map als de input PDFs
