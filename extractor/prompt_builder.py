@@ -136,18 +136,41 @@ def build_minimal_prompt(p: PromptInput) -> str:
 
     return f"""Extract manufacturing data from technical drawing PDF.
 
-**EXTRACT 4 THINGS:**
+**EXTRACT THESE MANUFACTURING FEATURES:**
 1. Surface treatment (HIGHEST PRIORITY - check BOM first!)
-2. Holes (tapgaten + toleranced holes)
-3. Toleranced dimensions
+2. Holes and hole operations (drilled, tapped, reamed, countersunk, fitted)
+3. Toleranced dimensions and toleranced holes
 4. Material
 5. BOM part numbers (if drawing has a BOM table)
+6. Machining operations and manufacturing notes
+7. Mapping signals for ERP/calculation review
 
 **RULES:**
 - Return 1 item per PDF ({p.images_count} image(s) of same part)
 - Extract only what's clearly visible
 - Use null/"None" if unsure
 - Ignore: general dimensions, metadata
+- Never hide a concrete hole or machining operation only in technicalAnalysis.
+  Also put it in holes and/or machiningOperations with evidence.
+- For every concrete manufacturing term, also add a detectedSignals entry with
+  category = the normalized code and rawValue = the exact visible term.
+
+**NORMALIZED CODES FOR MAPPING:**
+- DRILL: normal drilled/cut holes such as O12.5 or simple clearance holes
+- TAP: tapped/threaded holes such as M6, 4x M8, thread, tapped
+- REAM: reamed holes, ruiming/ruimen, reaming, H7/H8/H9 with reaming note
+- FIT_HOLE: hole fit/tolerance such as H7, H8, H9, F7, +0.6/+0.1 on a hole
+- COUNTERSINK: countersunk/verzonken holes
+- COUNTERBORE: counterbore/spotface/cilinderverzinking
+- MILL: milling/frezen/freesbewerking, pockets, slots, milled surfaces
+- TURN: turning/draaien/draaiwerk
+- BEND: bending/zetten/kanten
+- WELD: welding/lassen
+- DEBURR: break sharp edges, ontbramen, sharp edges removed
+- SURFACE_TREATMENT: coating, galvanizing, blasting, passivating, painting
+- ROUGHNESS: Ra/Rz surface roughness requirements
+- BOM: BOM row or referenced child part
+- MATERIAL: material grade, thickness or stock specification
 
 **1. SURFACE TREATMENT (CHECK THIS FIRST!):**
 - **CRITICAL**: Scan the entire BOM table (bottom right) for coating keywords
@@ -157,9 +180,20 @@ def build_minimal_prompt(p: PromptInput) -> str:
 - Examples: "Verzinkt", "Poedercoaten", "Coating Dynamic", or "None"{surface_additions}
 
 **2. HOLES:**
-- Normal: "O20" or "O20 H9" -> type=normal, diameter=20, tolerance=H9
-- Tapped: "M6" or "4x M6" -> type=tapped, threadSize=M6, count=4
-- Reamed: pre-drill + final -> type=reamed, notes="Pre-drill O19.5"
+- Every visible hole callout must create a holes row. Do not skip ordinary
+  drilled/cut holes just because STEP may also contain geometry.
+- Normal: "O20" -> normalizedCode=DRILL, type=normal, diameter=20
+- Tapped: "M6" or "4x M6" -> normalizedCode=TAP, type=tapped, threadSize=M6, count=4
+- Reamed: "Reaming O20H9 / Cutting Size O19.5" -> normalizedCode=REAM,
+  type=reamed, diameter=20, tolerance=H9, cuttingSize=19.5,
+  operation=reaming
+- Fitted/toleranced hole: "O40 +0.6/+0.1" -> normalizedCode=FIT_HOLE,
+  type=normal, diameter=40, upperTolerance=+0.6, lowerTolerance=+0.1
+- Countersunk: "verzonken", "countersink", "DIN 74" -> normalizedCode=COUNTERSINK
+- Plain holes that have a visible diameter but no operation note still matter
+  for PDF/STEP comparison and must be returned as DRILL.
+- Use count=1 for each separate visible location when no explicit count is
+  printed. Duplicate rows with the same diameter/fit may later be merged.
 - **CRITICAL**: Same hole at MULTIPLE locations -> create SEPARATE entries for EACH (don't combine unless labeled "2x"){hole_additions}
 
 **3. TOLERANCED DIMENSIONS (Lengths only):**
@@ -178,6 +212,9 @@ def build_minimal_prompt(p: PromptInput) -> str:
 - **CORRECT**: "RVS 2 mm", "AISI 304 3mm", "S235 5 mm"
 - **DO NOT extract generic types**: "Sheet", "Plaat", "Tube", "Buis" are NOT materials!
 - Material field is in BOM table (bottom right) under 'Material' or 'Materiaal' column
+- If the title block/base material table has separate fields such as
+  Material=S235, type=Sheet, Height=600, Width=117 and Thickness=12, extract
+  material="S235" and put the full stock description in notes.
 - If you see "Sheet" or "Plaat", look in the SAME ROW for the actual material number
 - Use patterns below for more customer-specific guidance.
 
@@ -191,6 +228,26 @@ def build_minimal_prompt(p: PromptInput) -> str:
   -> Return: ["10009081", "MD-21-04683"]
 - **Ignore the main part number** (the part number of THIS drawing in title block)
 - Only extract part numbers that refer to OTHER parts/components
+
+**6. MACHINING OPERATIONS AND MANUFACTURING NOTES:**
+- Populate machiningOperations for every visible operation-relevant note, even
+  when the same information is also represented in holes.
+- Use the normalized codes above. Set targetField="Borengaten" for DRILL, TAP,
+  REAM, FIT_HOLE, COUNTERSINK and COUNTERBORE.
+- Examples:
+  - "M6(4x)" -> normalizedCode=TAP, operation=tapping, count=4,
+    threadSize=M6, targetField=Borengaten
+  - "Reaming O20H9 / Cutting Size O19.5" -> normalizedCode=REAM,
+    operation=reaming, diameter=20, tolerance=H9, cuttingSize=19.5,
+    targetField=Borengaten
+  - "Break sharp edges" -> normalizedCode=DEBURR, operation=deburring
+- Include exact evidence text for every operation.
+
+**7. DETECTED SIGNALS FOR MAPPING:**
+- For each hole, operation, surface treatment, roughness, material, BOM part or
+  special tolerance, add detectedSignals with:
+  category=<normalized code>, rawValue=<exact visible term>, source="vision".
+- These signals are used for PdfTermTbl and PdfTermMappingTbl grouping.
 
 **Customer: {p.customer_name}**
 

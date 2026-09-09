@@ -134,7 +134,7 @@ pdf-extract batch /path/to/pdfs --output results/
 
 ## Available Models
 
-- `gemini-2.5-flash` (default, fastest normal route)
+- `gemini-3.6-flash` (default, fastest normal route)
 - `gemini-2.5-pro` (more accurate)
 - `gemini-1.5-flash`
 - `gemini-1.5-pro`
@@ -148,7 +148,7 @@ pdf-extract batch /path/to/pdfs --output results/
 
 ## Output
 
-- **XML**: Formatted output with operator warnings for tap holes, toleranced holes, critical dimensions
+- **XML**: Formatted output with detected mapping signals, holes, machining operations, technical analysis, and operator warnings for tap holes, toleranced holes, critical dimensions
 
 Output format: `PDF_XML_<foldername>.xml`
 
@@ -189,6 +189,8 @@ python_version/
 - **Direct CLI**: `pdf-extract` command without npm/server
 - **Fast PDF preflight**: Detects native text, raster scans, vector-outlined CAD and empty PDFs
 - **Automatic routing**: No second command is needed for raster or vector-outlined drawings
+- **Mapping-ready feature output**: Emits normalized signals such as `TAP`, `REAM`, `FIT_HOLE`, `DRILL`, `DEBURR`, `MATERIAL`, and `SURFACE_TREATMENT`
+- **Structured hole operations**: Keeps counts, diameters, thread sizes, tolerances, cutting sizes, and evidence text for later ERP/calculation mapping
 - **Bounded retry logic**: At most two retries on API errors (503, 429)
 - **Fail-fast circuit breaker**: Stops instead of pausing the foreground job for five minutes
 - **Assembly detection**: Identifies assembly drawings in batch mode

@@ -1,6 +1,6 @@
 """XML writer for order details with operator warnings."""
 
-from typing import Optional
+from typing import Any, Optional
 
 from .operator_warnings import (
     ExtractedItem,
@@ -9,6 +9,58 @@ from .operator_warnings import (
     generate_warning_xml,
 )
 from .types import OrderDetails, OrderItem
+
+
+EMPTY_VALUES = {"", "None", "none", "null", "NULL"}
+
+
+def has_value(value: Any) -> bool:
+    """Return True for values worth writing to XML."""
+
+    return value is not None and str(value).strip() not in EMPTY_VALUES
+
+
+def xml_attrs(**values: Any) -> str:
+    """Build escaped XML attributes from non-empty values."""
+
+    attrs = [
+        f'{name}="{escape_xml(str(value).strip())}"'
+        for name, value in values.items()
+        if has_value(value)
+    ]
+    return " " + " ".join(attrs) if attrs else ""
+
+
+def append_text_element(lines: list[str], indent: str, tag: str, value: Any) -> None:
+    """Append a text node when the value is meaningful."""
+
+    if has_value(value):
+        lines.append(f"{indent}<{tag}>{escape_xml(str(value).strip())}</{tag}>")
+
+
+def append_list_section(
+    lines: list[str],
+    section_tag: str,
+    item_tag: str,
+    values: list[Any],
+) -> None:
+    """Append a simple XML list for technical-analysis notes."""
+
+    meaningful_values = [value for value in values if has_value(value)]
+    if not meaningful_values:
+        return
+    lines.append(f"      <{section_tag}>")
+    for value in meaningful_values:
+        lines.append(f"        <{item_tag}>{escape_xml(str(value).strip())}</{item_tag}>")
+    lines.append(f"      </{section_tag}>")
+
+
+def operation_value(operation: Any, attribute: str) -> Any:
+    """Read a structured operation attribute with dict fallback."""
+
+    if isinstance(operation, dict):
+        return operation.get(attribute)
+    return getattr(operation, attribute, None)
 
 
 def write_item_xml(item: OrderItem) -> str:
@@ -44,31 +96,33 @@ def write_item_xml(item: OrderItem) -> str:
     if item.surface_treatment:
         lines.append(f"      <SurfaceTreatment>{escape_xml(item.surface_treatment)}</SurfaceTreatment>")
 
-    # Holes - only show tapped holes or holes with real tolerances
     if item.holes:
-        relevant_holes = [
-            h for h in item.holes
-            if h.type == "tapped"
-            or (h.tolerance and h.tolerance not in ["None", "null", ""])
-        ]
-        if relevant_holes:
-            lines.append("      <Holes>")
-            for hole in relevant_holes:
-                attrs = []
-                if hole.count is not None:
-                    attrs.append(f'count="{hole.count}"')
-                if hole.type:
-                    attrs.append(f'type="{escape_xml(hole.type)}"')
-                if hole.diameter and hole.diameter not in ["None", "null", ""]:
-                    attrs.append(f'diameter="{escape_xml(hole.diameter)}"')
-                if hole.thread_size and hole.thread_size not in ["None", "null", ""]:
-                    attrs.append(f'threadSize="{escape_xml(hole.thread_size)}"')
-                if hole.tolerance and hole.tolerance not in ["None", "null", ""]:
-                    attrs.append(f'tolerance="{escape_xml(hole.tolerance)}"')
-
-                attrs_str = " ".join(attrs)
-                lines.append(f"        <Hole {attrs_str}/>")
-            lines.append("      </Holes>")
+        lines.append("      <Holes>")
+        for hole in item.holes:
+            attrs = xml_attrs(
+                count=hole.count,
+                normalizedCode=hole.normalized_code,
+                type=hole.type,
+                operation=hole.operation,
+                diameter=hole.diameter,
+                threadSize=hole.thread_size,
+                tolerance=hole.tolerance,
+                upperTolerance=hole.upper_tolerance,
+                lowerTolerance=hole.lower_tolerance,
+                cuttingSize=hole.cutting_size,
+                depth=hole.depth,
+                location=hole.location,
+            )
+            child_lines: list[str] = []
+            append_text_element(child_lines, "          ", "Evidence", hole.evidence)
+            append_text_element(child_lines, "          ", "Notes", hole.notes)
+            if child_lines:
+                lines.append(f"        <Hole{attrs}>")
+                lines.extend(child_lines)
+                lines.append("        </Hole>")
+            else:
+                lines.append(f"        <Hole{attrs}/>")
+        lines.append("      </Holes>")
 
     # Tolerated Lengths
     if item.tolerated_lengths:
@@ -85,8 +139,84 @@ def write_item_xml(item: OrderItem) -> str:
                 lines.append(f"          <Lower>{escape_xml(t.lower_tolerance)}</Lower>")
             if t.notes:
                 lines.append(f"          <Notes>{escape_xml(t.notes)}</Notes>")
+            if t.evidence:
+                lines.append(f"          <Evidence>{escape_xml(t.evidence)}</Evidence>")
             lines.append("        </ToleratedLength>")
         lines.append("      </ToleratedLengths>")
+
+    if item.machining_operations:
+        lines.append("      <MachiningOperations>")
+        for operation in item.machining_operations:
+            if isinstance(operation, str):
+                lines.append(
+                    f"        <Operation>{escape_xml(operation.strip())}</Operation>"
+                )
+                continue
+            attrs = xml_attrs(
+                normalizedCode=operation.normalized_code,
+                operation=operation.operation,
+                category=operation.category,
+                targetField=operation.target_field,
+                count=operation.count,
+                diameter=operation.diameter,
+                threadSize=operation.thread_size,
+                tolerance=operation.tolerance,
+                cuttingSize=operation.cutting_size,
+                relatedFeature=operation.related_feature,
+            )
+            child_lines = []
+            append_text_element(child_lines, "          ", "Evidence", operation.evidence)
+            append_text_element(child_lines, "          ", "Notes", operation.notes)
+            if child_lines:
+                lines.append(f"        <Operation{attrs}>")
+                lines.extend(child_lines)
+                lines.append("        </Operation>")
+            else:
+                lines.append(f"        <Operation{attrs}/>")
+        lines.append("      </MachiningOperations>")
+
+    if item.technical_analysis:
+        analysis = item.technical_analysis
+        lines.append("      <TechnicalAnalysis>")
+        append_text_element(
+            lines,
+            "        ",
+            "ManufacturabilityStatus",
+            analysis.manufacturability_status,
+        )
+        append_text_element(lines, "        ", "Conclusion", analysis.conclusion)
+        append_list_section(
+            lines, "PositiveChecks", "Check", analysis.positive_checks
+        )
+        if analysis.risks:
+            lines.append("        <Risks>")
+            for risk in analysis.risks:
+                attrs = xml_attrs(severity=risk.severity, category=risk.category)
+                child_lines = []
+                append_text_element(child_lines, "            ", "Summary", risk.summary)
+                append_text_element(child_lines, "            ", "Evidence", risk.evidence)
+                if child_lines:
+                    lines.append(f"          <Risk{attrs}>")
+                    lines.extend(child_lines)
+                    lines.append("          </Risk>")
+                else:
+                    lines.append(f"          <Risk{attrs}/>")
+            lines.append("        </Risks>")
+        append_list_section(lines, "WeldingNotes", "Note", analysis.welding_notes)
+        append_list_section(
+            lines, "CoatingRequirements", "Requirement", analysis.coating_requirements
+        )
+        append_list_section(lines, "RevisionNotes", "Note", analysis.revision_notes)
+        append_list_section(
+            lines, "GdtRequirements", "Requirement", analysis.gdt_requirements
+        )
+        append_list_section(
+            lines, "GeneralTolerances", "Tolerance", analysis.general_tolerances
+        )
+        append_list_section(
+            lines, "AssemblyDimensions", "Dimension", analysis.assembly_dimensions
+        )
+        lines.append("      </TechnicalAnalysis>")
 
     # Operator warnings (tap holes, toleranced holes, critical dimensions)
     extracted_item = ExtractedItem(
@@ -100,6 +230,8 @@ def write_item_xml(item: OrderItem) -> str:
                 "threadSize": h.thread_size,
                 "diameter": h.diameter,
                 "tolerance": h.tolerance,
+                "upperTolerance": h.upper_tolerance,
+                "lowerTolerance": h.lower_tolerance,
                 "count": h.count,
             }
             for h in (item.holes or [])
@@ -157,6 +289,26 @@ def build_simple_order_xml(data: OrderDetails) -> str:
 
     if data.customer_name:
         parts.append(f"  <Customer>{escape_xml(data.customer_name)}</Customer>")
+
+    if data.detected_signals:
+        parts.append("  <DetectedSignals>")
+        for signal in data.detected_signals:
+            attrs = xml_attrs(
+                category=signal.category,
+                rawValue=signal.raw_value,
+                page=signal.page,
+                source=signal.source,
+            )
+            child_lines: list[str] = []
+            append_text_element(child_lines, "      ", "Context", signal.context)
+            append_text_element(child_lines, "      ", "Note", signal.note)
+            if child_lines:
+                parts.append(f"    <Signal{attrs}>")
+                parts.extend(child_lines)
+                parts.append("    </Signal>")
+            else:
+                parts.append(f"    <Signal{attrs}/>")
+        parts.append("  </DetectedSignals>")
 
     parts.append("  <Items>")
     for item in data.items or []:

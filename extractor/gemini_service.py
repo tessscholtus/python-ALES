@@ -2,6 +2,7 @@
 
 import base64
 import json
+import re
 from pathlib import Path
 from typing import Any, Optional
 
@@ -40,10 +41,18 @@ ORDER_DETAILS_SCHEMA = {
                             "type": "object",
                             "properties": {
                                 "count": {"type": "number"},
+                                "normalizedCode": {"type": "string"},
                                 "type": {"type": "string"},
+                                "operation": {"type": "string"},
                                 "diameter": {"type": "string"},
                                 "threadSize": {"type": "string"},
                                 "tolerance": {"type": "string"},
+                                "upperTolerance": {"type": "string"},
+                                "lowerTolerance": {"type": "string"},
+                                "cuttingSize": {"type": "string"},
+                                "depth": {"type": "string"},
+                                "location": {"type": "string"},
+                                "evidence": {"type": "string"},
                                 "notes": {"type": "string"},
                             },
                         },
@@ -58,6 +67,8 @@ ORDER_DETAILS_SCHEMA = {
                                 "toleranceType": {"type": "string"},
                                 "upperTolerance": {"type": "string"},
                                 "lowerTolerance": {"type": "string"},
+                                "relatedFeature": {"type": "string"},
+                                "evidence": {"type": "string"},
                             },
                         },
                     },
@@ -87,7 +98,23 @@ ORDER_DETAILS_SCHEMA = {
                     },
                     "machiningOperations": {
                         "type": "array",
-                        "items": {"type": "string"},
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "normalizedCode": {"type": "string"},
+                                "operation": {"type": "string"},
+                                "category": {"type": "string"},
+                                "targetField": {"type": "string"},
+                                "count": {"type": "number"},
+                                "diameter": {"type": "string"},
+                                "threadSize": {"type": "string"},
+                                "tolerance": {"type": "string"},
+                                "cuttingSize": {"type": "string"},
+                                "relatedFeature": {"type": "string"},
+                                "evidence": {"type": "string"},
+                                "notes": {"type": "string"},
+                            },
+                        },
                     },
                     "technicalAnalysis": {
                         "type": "object",
@@ -196,6 +223,618 @@ def apply_customer_surface_treatment_fixes(
             return "None"
 
     return extracted
+
+
+HOLE_OPERATION_CODES = {
+    "DRILL",
+    "TAP",
+    "REAM",
+    "FIT_HOLE",
+    "COUNTERSINK",
+    "COUNTERBORE",
+}
+
+EMPTY_VALUE_MARKERS = {"", "none", "null", "n/a", "na", "-", "geen"}
+
+
+def _clean_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _has_value(value: Any) -> bool:
+    return _clean_text(value).lower() not in EMPTY_VALUE_MARKERS
+
+
+def _clean_code(value: Any) -> str:
+    return _clean_text(value).upper()
+
+
+def _int_count(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 1
+    return max(1, parsed)
+
+
+def _merge_text(existing: Any, new: Any) -> str:
+    existing_text = _clean_text(existing)
+    new_text = _clean_text(new)
+    if not existing_text:
+        return new_text
+    if not new_text or new_text == existing_text:
+        return existing_text
+    return f"{existing_text} | {new_text}"
+
+
+def _merge_list_field(target: dict[str, Any], incoming: dict[str, Any], field: str) -> None:
+    incoming_values = incoming.get(field)
+    if not isinstance(incoming_values, list):
+        return
+
+    merged = target.get(field)
+    if not isinstance(merged, list):
+        merged = []
+
+    for value in incoming_values:
+        if value not in merged:
+            merged.append(value)
+
+    if merged:
+        target[field] = merged
+
+
+def _merge_dict_field(target: dict[str, Any], incoming: dict[str, Any], field: str) -> None:
+    incoming_value = incoming.get(field)
+    if not isinstance(incoming_value, dict):
+        return
+
+    existing = target.get(field)
+    if not isinstance(existing, dict):
+        target[field] = incoming_value
+        return
+
+    for key, value in incoming_value.items():
+        if isinstance(value, list):
+            current = existing.get(key)
+            if not isinstance(current, list):
+                current = []
+            for entry in value:
+                if entry not in current:
+                    current.append(entry)
+            if current:
+                existing[key] = current
+        elif not _has_value(existing.get(key)) and _has_value(value):
+            existing[key] = value
+        elif key in {"summary", "notes"}:
+            existing[key] = _merge_text(existing.get(key), value)
+
+
+def _merge_item(target: dict[str, Any], incoming: dict[str, Any]) -> None:
+    for field in ("description", "material", "surfaceTreatment", "revision", "status"):
+        if not _has_value(target.get(field)) and _has_value(incoming.get(field)):
+            target[field] = incoming.get(field)
+
+    target["notes"] = _merge_text(target.get("notes"), incoming.get("notes")) or None
+
+    if _has_value(incoming.get("quantity")):
+        target["quantity"] = max(
+            _int_count(target.get("quantity")),
+            _int_count(incoming.get("quantity")),
+        )
+
+    for field in (
+        "holes",
+        "toleratedLengths",
+        "bomPartNumbers",
+        "bomItems",
+        "machiningOperations",
+    ):
+        _merge_list_field(target, incoming, field)
+
+    _merge_dict_field(target, incoming, "technicalAnalysis")
+
+
+def merge_duplicate_items(data: dict[str, Any]) -> None:
+    """Merge fragmented rows that refer to the same PDF part."""
+
+    items = data.get("items")
+    if not isinstance(items, list):
+        return
+
+    merged: list[dict[str, Any]] = []
+    index: dict[str, dict[str, Any]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        key = _clean_text(item.get("partNumber")).lower()
+        if not key:
+            merged.append(item)
+            continue
+        if key not in index:
+            index[key] = item
+            merged.append(item)
+            continue
+        _merge_item(index[key], item)
+
+    data["items"] = merged
+
+
+def normalize_machining_operations(data: dict[str, Any]) -> None:
+    """Merge duplicate operation rows while preserving repeated locations."""
+
+    for item in data.get("items") or []:
+        operations = item.get("machiningOperations")
+        if not isinstance(operations, list):
+            continue
+
+        merged: list[dict[str, Any]] = []
+        index: dict[tuple[str, str, str, str, str, str], dict[str, Any]] = {}
+        for operation in operations:
+            if not isinstance(operation, dict):
+                continue
+            code = _clean_code(operation.get("normalizedCode"))
+            if not code and not any(
+                _has_value(operation.get(field))
+                for field in (
+                    "operation",
+                    "evidence",
+                    "notes",
+                    "diameter",
+                    "threadSize",
+                    "tolerance",
+                    "cuttingSize",
+                )
+            ):
+                continue
+            if code == "SURFACE_TREATMENT" and not any(
+                _has_value(operation.get(field))
+                for field in ("evidence", "notes", "surfaceTreatment", "rawValue")
+            ):
+                continue
+            if code == "TAP" and _clean_text(operation.get("tolerance")).upper() == _clean_text(
+                operation.get("threadSize")
+            ).upper():
+                operation.pop("tolerance", None)
+            key = (
+                code,
+                _clean_text(operation.get("operation")).lower(),
+                _clean_text(operation.get("diameter")).lower(),
+                _clean_text(operation.get("threadSize")).lower(),
+                _clean_text(operation.get("tolerance")).lower(),
+                _clean_text(operation.get("cuttingSize")).lower(),
+            )
+
+            if key not in index:
+                operation["normalizedCode"] = code or operation.get("normalizedCode")
+                index[key] = operation
+                merged.append(operation)
+                continue
+
+            existing = index[key]
+            existing_count = _int_count(existing.get("count"))
+            new_count = _int_count(operation.get("count"))
+            same_evidence = _clean_text(existing.get("evidence")) == _clean_text(
+                operation.get("evidence")
+            )
+
+            if same_evidence and max(existing_count, new_count) > 1:
+                existing["count"] = max(existing_count, new_count)
+            else:
+                existing["count"] = existing_count + new_count
+            for field in (
+                "diameter",
+                "threadSize",
+                "tolerance",
+                "cuttingSize",
+                "relatedFeature",
+                "targetField",
+            ):
+                if not _has_value(existing.get(field)) and _has_value(operation.get(field)):
+                    existing[field] = operation.get(field)
+            existing["evidence"] = _merge_text(
+                existing.get("evidence"), operation.get("evidence")
+            )
+            existing["notes"] = _merge_text(existing.get("notes"), operation.get("notes"))
+
+        item["machiningOperations"] = merged
+
+
+def normalize_holes(data: dict[str, Any]) -> None:
+    """Merge duplicate hole rows and clean derived thread/tolerance fields."""
+
+    for item in data.get("items") or []:
+        holes = item.get("holes")
+        if not isinstance(holes, list):
+            continue
+
+        merged: list[dict[str, Any]] = []
+        index: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
+        for hole in holes:
+            if not isinstance(hole, dict):
+                continue
+
+            code = _clean_code(hole.get("normalizedCode"))
+            if not code:
+                code = _clean_code(hole.get("type"))
+            if code == "TAPPED":
+                code = "TAP"
+            if code == "REAMED":
+                code = "REAM"
+            if code == "COUNTERSUNK":
+                code = "COUNTERSINK"
+            if code:
+                hole["normalizedCode"] = code
+
+            evidence = _clean_text(hole.get("evidence"))
+            if code == "TAP":
+                if not _has_value(hole.get("threadSize")) and evidence:
+                    thread_size = _extract_thread_size(evidence)
+                    if thread_size:
+                        hole["threadSize"] = thread_size
+                if _clean_text(hole.get("tolerance")).upper() == _clean_text(
+                    hole.get("threadSize")
+                ).upper():
+                    hole.pop("tolerance", None)
+            if code in HOLE_OPERATION_CODES and evidence:
+                if not _has_value(hole.get("diameter")):
+                    diameter = _extract_diameter(evidence)
+                    if diameter:
+                        hole["diameter"] = diameter
+                if not _has_value(hole.get("tolerance")):
+                    tolerance = _extract_hole_tolerance(evidence)
+                    if tolerance:
+                        hole["tolerance"] = tolerance
+                if not _has_value(hole.get("cuttingSize")):
+                    cutting_size = _extract_cutting_size(evidence)
+                    if cutting_size:
+                        hole["cuttingSize"] = cutting_size
+
+            key = (
+                _clean_code(hole.get("normalizedCode")),
+                _clean_text(hole.get("diameter")).lower(),
+                _clean_text(hole.get("threadSize")).lower(),
+                _clean_text(hole.get("tolerance")).lower(),
+                _clean_text(hole.get("cuttingSize")).lower(),
+            )
+            if key not in index:
+                index[key] = hole
+                merged.append(hole)
+                continue
+
+            existing = index[key]
+            existing_count = _int_count(existing.get("count"))
+            new_count = _int_count(hole.get("count"))
+            same_evidence = _clean_text(existing.get("evidence")) == evidence
+
+            if same_evidence and max(existing_count, new_count) > 1:
+                existing["count"] = max(existing_count, new_count)
+            else:
+                existing["count"] = existing_count + new_count
+            existing["evidence"] = _merge_text(existing.get("evidence"), hole.get("evidence"))
+            existing["notes"] = _merge_text(existing.get("notes"), hole.get("notes"))
+
+        item["holes"] = merged
+
+
+def _hole_type_for_code(code: str) -> str:
+    return {
+        "TAP": "tapped",
+        "REAM": "reamed",
+        "COUNTERSINK": "countersunk",
+        "COUNTERBORE": "counterbore",
+    }.get(code, "normal")
+
+
+def _operation_for_code(code: str) -> str:
+    return {
+        "DRILL": "drilling",
+        "TAP": "tapping",
+        "REAM": "reaming",
+        "FIT_HOLE": "hole fit",
+        "COUNTERSINK": "countersinking",
+        "COUNTERBORE": "counterboring",
+        "DEBURR": "deburring",
+        "MILL": "milling",
+        "TURN": "turning",
+        "BEND": "bending",
+        "WELD": "welding",
+        "SURFACE_TREATMENT": "surface treatment",
+    }.get(code, code.lower())
+
+
+def _target_field_for_code(code: str) -> str | None:
+    if code in HOLE_OPERATION_CODES:
+        return "Borengaten"
+    if code == "SURFACE_TREATMENT":
+        return "surfaceTreatment"
+    return None
+
+
+def _extract_count(raw_value: str) -> int | None:
+    match = re.search(r"(?i)(?:^|\D)(\d+)\s*x|x\s*(\d+)|\((\d+)\s*x\)", raw_value)
+    if not match:
+        return None
+    for group in match.groups():
+        if group:
+            return _int_count(group)
+    return None
+
+
+def _extract_diameter(raw_value: str) -> str:
+    match = re.search(r"(?:Ø|⌀|O)\s*([0-9]+(?:[.,][0-9]+)?)", raw_value)
+    return match.group(1).replace(",", ".") if match else ""
+
+
+def _extract_thread_size(raw_value: str) -> str:
+    match = re.search(r"(?i)\bM\s*([0-9]+(?:[.,][0-9]+)?)\b", raw_value)
+    return f"M{match.group(1).replace(',', '.')}" if match else ""
+
+
+def _extract_cutting_size(raw_value: str) -> str:
+    match = re.search(
+        r"(?i)cutting\s+size\s*(?:Ø|⌀|O)?\s*([0-9]+(?:[.,][0-9]+)?)",
+        raw_value,
+    )
+    return match.group(1).replace(",", ".") if match else ""
+
+
+def _extract_hole_tolerance(raw_value: str) -> str:
+    fit = re.search(
+        r"(?i)(?:Ø|⌀|O)?\s*[0-9]+(?:[.,][0-9]+)?\s*([A-LN-Z][0-9]{1,2})\b",
+        raw_value,
+    )
+    if not fit:
+        fit = re.search(r"(?i)\b([A-LN-Z][0-9]{1,2})\b", raw_value)
+    if fit:
+        return fit.group(1).upper()
+    plus_minus = re.search(
+        r"([+-]\s*[0-9]+(?:[.,][0-9]+)?(?:\s*/\s*[+-]?\s*[0-9]+(?:[.,][0-9]+)?)?)",
+        raw_value,
+    )
+    if plus_minus:
+        return plus_minus.group(1).replace(" ", "").replace(",", ".")
+    return ""
+
+
+def _operation_key(operation: dict[str, Any]) -> tuple[str, str, str, str, str, str]:
+    return (
+        _clean_code(operation.get("normalizedCode")),
+        _clean_text(operation.get("operation")).lower(),
+        _clean_text(operation.get("diameter")).lower(),
+        _clean_text(operation.get("threadSize")).lower(),
+        _clean_text(operation.get("tolerance")).lower(),
+        _clean_text(operation.get("cuttingSize")).lower(),
+    )
+
+
+def _signal_context_applies(signal: dict[str, Any], item: dict[str, Any], item_count: int) -> bool:
+    context = _clean_text(signal.get("context"))
+    if not context and item_count == 1:
+        return True
+    part_number = _clean_text(item.get("partNumber"))
+    return bool(part_number and part_number in context)
+
+
+def backfill_operations_from_signals(data: dict[str, Any]) -> None:
+    """Use mapping signals as an additional operation source."""
+
+    items = [item for item in data.get("items") or [] if isinstance(item, dict)]
+    for item in items:
+        operations = [
+            operation
+            for operation in item.get("machiningOperations") or []
+            if isinstance(operation, dict)
+        ]
+        operation_keys = {_operation_key(operation) for operation in operations}
+
+        for signal in data.get("detectedSignals") or []:
+            if not isinstance(signal, dict):
+                continue
+            code = _clean_code(signal.get("category"))
+            raw_value = _clean_text(signal.get("rawValue"))
+            if not _has_value(raw_value) or code not in HOLE_OPERATION_CODES | {"DEBURR", "MILL", "TURN", "BEND", "WELD", "SURFACE_TREATMENT"}:
+                continue
+            if not _signal_context_applies(signal, item, len(items)):
+                continue
+
+            operation: dict[str, Any] = {
+                "normalizedCode": code,
+                "operation": _operation_for_code(code),
+                "targetField": _target_field_for_code(code),
+                "evidence": raw_value,
+            }
+            count = _extract_count(raw_value)
+            if count is not None:
+                operation["count"] = count
+            diameter = _extract_diameter(raw_value)
+            if diameter:
+                operation["diameter"] = diameter
+            thread_size = _extract_thread_size(raw_value)
+            if thread_size:
+                operation["threadSize"] = thread_size
+            tolerance = _extract_hole_tolerance(raw_value)
+            if tolerance:
+                operation["tolerance"] = tolerance
+            cutting_size = _extract_cutting_size(raw_value)
+            if cutting_size:
+                operation["cuttingSize"] = cutting_size
+            if code in HOLE_OPERATION_CODES and count is None:
+                operation["notes"] = "Count not explicit in detected signal; verify against drawing or STEP geometry."
+
+            key = _operation_key(operation)
+            if key in operation_keys:
+                continue
+            operation_keys.add(key)
+            operations.append(operation)
+
+        if operations:
+            item["machiningOperations"] = operations
+
+
+def backfill_holes_from_operations(data: dict[str, Any]) -> None:
+    """Use structured operation signals as hole rows when Gemini omitted holes."""
+
+    for item in data.get("items") or []:
+        existing_holes = [
+            hole for hole in item.get("holes") or [] if isinstance(hole, dict)
+        ]
+        hole_keys = {
+            (
+                _clean_code(hole.get("normalizedCode")),
+                _clean_text(hole.get("diameter")).lower(),
+                _clean_text(hole.get("threadSize")).lower(),
+                _clean_text(hole.get("tolerance")).lower(),
+                _clean_text(hole.get("cuttingSize")).lower(),
+            )
+            for hole in existing_holes
+        }
+        holes: list[dict[str, Any]] = []
+        for operation in item.get("machiningOperations") or []:
+            if not isinstance(operation, dict):
+                continue
+            code = _clean_code(operation.get("normalizedCode"))
+            if code not in HOLE_OPERATION_CODES:
+                continue
+            key = (
+                code,
+                _clean_text(operation.get("diameter")).lower(),
+                _clean_text(operation.get("threadSize")).lower(),
+                _clean_text(operation.get("tolerance")).lower(),
+                _clean_text(operation.get("cuttingSize")).lower(),
+            )
+            if key in hole_keys:
+                continue
+            hole_keys.add(key)
+            holes.append(
+                {
+                    "count": operation.get("count"),
+                    "normalizedCode": code,
+                    "type": _hole_type_for_code(code),
+                    "operation": operation.get("operation"),
+                    "diameter": operation.get("diameter"),
+                    "threadSize": operation.get("threadSize"),
+                    "tolerance": operation.get("tolerance"),
+                    "cuttingSize": operation.get("cuttingSize"),
+                    "evidence": operation.get("evidence"),
+                    "notes": operation.get("notes"),
+                }
+            )
+        if holes:
+            item["holes"] = existing_holes + holes
+
+
+def backfill_item_fields_from_signals(data: dict[str, Any]) -> None:
+    """Use explicit mapping signals as conservative item-level fallbacks."""
+
+    material = ""
+    surface_treatment = ""
+    for signal in data.get("detectedSignals") or []:
+        if not isinstance(signal, dict):
+            continue
+        category = _clean_code(signal.get("category"))
+        raw_value = _clean_text(signal.get("rawValue"))
+        if raw_value in {"", "None", "none", "null"}:
+            continue
+        if category == "MATERIAL" and not material:
+            material = raw_value
+        elif category == "SURFACE_TREATMENT" and not surface_treatment:
+            surface_treatment = raw_value
+
+    for item in data.get("items") or []:
+        if material and not _clean_text(item.get("material")):
+            item["material"] = material
+        if surface_treatment and not _clean_text(item.get("surfaceTreatment")):
+            item["surfaceTreatment"] = surface_treatment
+
+
+def append_detected_signal(
+    signals: list[dict[str, Any]],
+    seen: set[tuple[str, str]],
+    *,
+    category: str,
+    raw_value: Any,
+    context: Any = None,
+) -> None:
+    """Append a mapping signal once."""
+
+    category = _clean_code(category)
+    raw_text = _clean_text(raw_value)
+    if not category or not _has_value(raw_text):
+        return
+    key = (category, raw_text)
+    if key in seen:
+        return
+    seen.add(key)
+    signals.append(
+        {
+            "category": category,
+            "rawValue": raw_text,
+            "page": 1,
+            "source": "vision",
+            "context": _clean_text(context),
+        }
+    )
+
+
+def backfill_detected_signals(data: dict[str, Any]) -> None:
+    """Create mapping-ready signals from structured features."""
+
+    signals = [
+        signal
+        for signal in data.get("detectedSignals") or []
+        if isinstance(signal, dict)
+        and _clean_code(signal.get("category"))
+        and _has_value(signal.get("rawValue"))
+    ]
+    seen = {
+        (_clean_code(signal.get("category")), _clean_text(signal.get("rawValue")))
+        for signal in signals
+        if isinstance(signal, dict)
+    }
+
+    for item in data.get("items") or []:
+        append_detected_signal(
+            signals,
+            seen,
+            category="MATERIAL",
+            raw_value=item.get("material"),
+            context=item.get("partNumber"),
+        )
+        append_detected_signal(
+            signals,
+            seen,
+            category="SURFACE_TREATMENT",
+            raw_value=item.get("surfaceTreatment"),
+            context=item.get("partNumber"),
+        )
+        for hole in item.get("holes") or []:
+            if not isinstance(hole, dict):
+                continue
+            append_detected_signal(
+                signals,
+                seen,
+                category=hole.get("normalizedCode") or hole.get("type") or "DRILL",
+                raw_value=hole.get("evidence")
+                or hole.get("threadSize")
+                or hole.get("diameter"),
+                context=item.get("partNumber"),
+            )
+        for operation in item.get("machiningOperations") or []:
+            if not isinstance(operation, dict):
+                continue
+            append_detected_signal(
+                signals,
+                seen,
+                category=operation.get("normalizedCode") or operation.get("operation"),
+                raw_value=operation.get("evidence") or operation.get("operation"),
+                context=item.get("partNumber"),
+            )
+
+    if signals:
+        data["detectedSignals"] = signals
 
 
 def build_tolerated_length_instructions(config: CustomerConfig) -> str:
@@ -374,6 +1013,14 @@ async def extract_order_details_from_pdf(
             fixed = apply_customer_surface_treatment_fixes(customer_id, normalized, is_assembly)
             if fixed != normalized:
                 item["surfaceTreatment"] = fixed or "None"
+
+    merge_duplicate_items(data)
+    backfill_item_fields_from_signals(data)
+    backfill_operations_from_signals(data)
+    normalize_machining_operations(data)
+    backfill_holes_from_operations(data)
+    normalize_holes(data)
+    backfill_detected_signals(data)
 
     # Create OrderDetails model
     order_details = OrderDetails(**data)

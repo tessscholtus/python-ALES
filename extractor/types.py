@@ -9,12 +9,18 @@ from .constants import DEFAULT_GEMINI_MODEL
 class HoleDetails(BaseModel):
     """Details of a hole in the drawing."""
     count: Optional[int] = None
+    normalized_code: Optional[str] = Field(None, alias="normalizedCode")
     type: Optional[str] = None  # Was Literal, but LLM may return other values like "threaded", "drilled"
+    operation: Optional[str] = None
     diameter: Optional[str] = None
     thread_size: Optional[str] = Field(None, alias="threadSize")
     tolerance: Optional[str] = None
+    upper_tolerance: Optional[str] = Field(None, alias="upperTolerance")
+    lower_tolerance: Optional[str] = Field(None, alias="lowerTolerance")
+    cutting_size: Optional[str] = Field(None, alias="cuttingSize")
     depth: Optional[str] = None
     location: Optional[str] = None
+    evidence: Optional[str] = None
     notes: Optional[str] = None
 
     class Config:
@@ -29,6 +35,7 @@ class ToleratedLength(BaseModel):
     upper_tolerance: Optional[str] = Field(None, alias="upperTolerance")
     lower_tolerance: Optional[str] = Field(None, alias="lowerTolerance")
     related_feature: Optional[str] = Field(None, alias="relatedFeature")
+    evidence: Optional[str] = None
 
     class Config:
         populate_by_name = True
@@ -55,6 +62,26 @@ class BomItem(BaseModel):
     quantity: Optional[int] = None
     description: Optional[str] = None
     material: Optional[str] = None
+
+    class Config:
+        populate_by_name = True
+
+
+class MachiningOperation(BaseModel):
+    """A visible manufacturing operation or operation-relevant PDF signal."""
+
+    normalized_code: Optional[str] = Field(None, alias="normalizedCode")
+    operation: Optional[str] = None
+    category: Optional[str] = None
+    target_field: Optional[str] = Field(None, alias="targetField")
+    count: Optional[int] = None
+    diameter: Optional[str] = None
+    thread_size: Optional[str] = Field(None, alias="threadSize")
+    tolerance: Optional[str] = None
+    cutting_size: Optional[str] = Field(None, alias="cuttingSize")
+    related_feature: Optional[str] = Field(None, alias="relatedFeature")
+    evidence: Optional[str] = None
+    notes: Optional[str] = None
 
     class Config:
         populate_by_name = True
@@ -111,7 +138,7 @@ class OrderItem(BaseModel):
     notes: Optional[str] = None
     bom_part_numbers: Optional[list[str]] = Field(None, alias="bomPartNumbers")
     bom_items: Optional[list[BomItem]] = Field(None, alias="bomItems")
-    machining_operations: Optional[list[str]] = Field(
+    machining_operations: Optional[list[MachiningOperation | str]] = Field(
         None, alias="machiningOperations"
     )
     technical_analysis: Optional[TechnicalAnalysis] = Field(

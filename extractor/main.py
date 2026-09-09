@@ -38,7 +38,13 @@ from .constants import (
 from .csv_logger import log_pdf_result
 from .gemini_service import extract_order_details_from_pdf, read_pdf_as_base64
 from .pdf_preflight import PdfPreflightResult, preflight_pdf
-from .types import ExtractionOptions, OrderDetails, OrderItem, ProcessingMetadata
+from .types import (
+    ExtractionOptions,
+    OrderDetails,
+    OrderItem,
+    ProcessingMetadata,
+    TextSignal,
+)
 from .xml_writer import build_simple_order_xml
 
 # Load environment variables
@@ -398,6 +404,7 @@ async def extract_batch(
     console.print(f"\n[blue]Processing {len(pdf_files)} PDFs...[/blue]")
 
     all_items: list[OrderItem] = []
+    all_signals: list[TextSignal] = []
     failed_items: list[OrderItem] = []
     success_count = 0
     fail_count = 0
@@ -438,6 +445,8 @@ async def extract_batch(
 
                 if data.items and any(item.status != "FAILED" for item in data.items):
                     all_items.extend(data.items)
+                    if data.detected_signals:
+                        all_signals.extend(data.detected_signals)
                     success_count += 1
                     # Update description to show last success
                     progress.update(
@@ -519,7 +528,11 @@ async def extract_batch(
     combined_items = failed_items + all_items
 
     # Create combined order with metadata
-    combined_order = OrderDetails(items=combined_items, metadata=metadata)
+    combined_order = OrderDetails(
+        items=combined_items,
+        detected_signals=all_signals or None,
+        metadata=metadata,
+    )
 
     # Detect assembly (only from successful items)
     assembly_part_number = detect_assembly(all_items)

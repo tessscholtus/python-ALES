@@ -112,3 +112,42 @@ def test_empty_fast_result_escalates_once_in_auto_mode(
     assert data.items[0].material == "S235"
     assert selected_model == DEEP_GEMINI_MODEL
     assert calls == [FAST_GEMINI_MODEL, DEEP_GEMINI_MODEL]
+
+
+def test_batch_preserves_detected_signals_for_mapping(tmp_path: Path, monkeypatch) -> None:
+    pdf_folder = tmp_path / "pdfs"
+    output_dir = tmp_path / "out"
+    pdf_folder.mkdir()
+    (pdf_folder / "part-a.pdf").write_bytes(b"%PDF-1.3\n")
+    (pdf_folder / "part-b.pdf").write_bytes(b"%PDF-1.3\n")
+
+    async def fake_extract_routed_pdf(pdf_path, **_kwargs):
+        return (
+            OrderDetails(
+                items=[{"partNumber": pdf_path.stem, "description": "Part"}],
+                detectedSignals=[
+                    {
+                        "category": "TAP",
+                        "rawValue": "M6(4x)",
+                        "page": 1,
+                        "source": "vision",
+                    }
+                ],
+            ),
+            _profile(),
+            FAST_GEMINI_MODEL,
+            0.1,
+        )
+
+    monkeypatch.setattr(main, "extract_routed_pdf", fake_extract_routed_pdf)
+    monkeypatch.setattr(main, "log_pdf_result", lambda **_kwargs: None)
+
+    result = asyncio.run(main.extract_batch(pdf_folder, output_dir=output_dir))
+
+    assert result.detected_signals is not None
+    assert len(result.detected_signals) == 2
+    assert {signal.raw_value for signal in result.detected_signals} == {"M6(4x)"}
+
+    xml = (output_dir / "PDF_XML_pdfs.xml").read_text(encoding="utf-8")
+    assert "<DetectedSignals>" in xml
+    assert xml.count('category="TAP"') == 2

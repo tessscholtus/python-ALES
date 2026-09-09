@@ -31,6 +31,8 @@ Thumbs.db
 test_output/
 test_samples/
 poc-data/
+analysis_output/
 
 # Logs
 *.log
+logs/*.csv

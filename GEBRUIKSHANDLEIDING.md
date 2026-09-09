@@ -144,7 +144,7 @@ Deze configs bepalen:
 
 ### Aanbeveling
 
-De normale route gebruikt `gemini-2.5-flash`. Gebruik `--scan-depth deep` of
+De normale route gebruikt `gemini-3.6-flash`. Gebruik `--scan-depth deep` of
 een expliciete modeloverride voor kritieke tekeningen die extra controle nodig
 hebben. De bovenstaande benchmark is historisch en betreft een andere
 Flash-preview; gebruik hem niet als actuele performancegarantie.
