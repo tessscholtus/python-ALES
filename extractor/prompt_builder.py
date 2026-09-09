@@ -77,6 +77,45 @@ Surface treatments:{surface_treatment_instructions}
 Return valid JSON per schema."""
 
 
+def build_technical_assembly_prompt(
+    customer_name: str,
+    surface_treatment_instructions: str,
+) -> str:
+    """Build the structured vision prompt for a main assembly drawing."""
+
+    return f"""Analyse this MAIN ASSEMBLY technical drawing for manufacturing.
+
+Read the visible drawing itself, including title block, BOM, dimensions, GD&T,
+notes, welding instructions and surface-treatment fields. The PDF may contain
+vector outlines without an extractable text layer, so rely on the rendered
+visual content.
+
+Return exactly one item and populate:
+- partNumber, revision, description, material and surfaceTreatment;
+- bomItems with position, partNumber, quantity, description and material;
+- bomPartNumbers with the part numbers from bomItems;
+- holes, toleratedLengths and machiningOperations only when explicitly shown;
+- technicalAnalysis with manufacturabilityStatus, a short conclusion,
+  positiveChecks, risks, weldingNotes, coatingRequirements, revisionNotes,
+  gdtRequirements, generalTolerances and assemblyDimensions.
+
+Rules:
+- Use only evidence visible in this PDF. Do not invent missing specifications.
+- Put unclear or missing production information in risks with severity
+  blocker, warning or info.
+- Preserve exact values and units in evidence strings.
+- Check arithmetic dimension chains only when every operand is visible.
+- Do not claim that STEP or ERP agrees unless those sources are supplied.
+- If coating, welding quality, revision or inspection interpretation is
+  incomplete, report that explicitly instead of guessing.
+- Keep every list concise and remove duplicates.
+
+Customer: {customer_name}
+Surface treatments:{surface_treatment_instructions}
+
+Return valid JSON per schema."""
+
+
 def build_minimal_prompt(p: PromptInput) -> str:
     """Build the minimal extraction prompt."""
     signals = f"\n{p.text_signals_section}\n" if p.text_signals_section else ""

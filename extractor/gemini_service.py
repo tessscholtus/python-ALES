@@ -17,6 +17,7 @@ from .prompt_builder import (
     PromptInput,
     build_assembly_prompt,
     build_minimal_prompt,
+    build_technical_assembly_prompt,
     build_text_signals_section,
 )
 from .types import ExtractionOptions, OrderDetails
@@ -62,11 +63,79 @@ ORDER_DETAILS_SCHEMA = {
                     },
                     "surfaceTreatment": {"type": "string"},
                     "material": {"type": "string"},
+                    "revision": {"type": "string"},
+                    "description": {"type": "string"},
+                    "quantity": {"type": "number"},
                     "notes": {"type": "string"},
                     "bomPartNumbers": {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "Part numbers from BOM table, empty array if no BOM",
+                    },
+                    "bomItems": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "position": {"type": "string"},
+                                "partNumber": {"type": "string"},
+                                "quantity": {"type": "number"},
+                                "description": {"type": "string"},
+                                "material": {"type": "string"},
+                            },
+                        },
+                    },
+                    "machiningOperations": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "technicalAnalysis": {
+                        "type": "object",
+                        "properties": {
+                            "manufacturabilityStatus": {"type": "string"},
+                            "conclusion": {"type": "string"},
+                            "positiveChecks": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "risks": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "severity": {"type": "string"},
+                                        "category": {"type": "string"},
+                                        "summary": {"type": "string"},
+                                        "evidence": {"type": "string"},
+                                    },
+                                    "required": ["summary"],
+                                },
+                            },
+                            "weldingNotes": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "coatingRequirements": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "revisionNotes": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "gdtRequirements": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "generalTolerances": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "assemblyDimensions": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                        },
                     },
                 },
             },
@@ -213,6 +282,7 @@ async def extract_order_details_from_pdf(
     pdf_filename = options.pdf_filename
     model_name = options.model
     is_assembly = options.is_assembly
+    technical_analysis = options.technical_analysis
 
     # Load customer config
     config = load_customer_config(customer_id)
@@ -237,7 +307,12 @@ async def extract_order_details_from_pdf(
         }
 
     # Build the prompt
-    if is_assembly:
+    if technical_analysis:
+        prompt = build_technical_assembly_prompt(
+            customer_name,
+            surface_treatment_instructions,
+        )
+    elif is_assembly:
         prompt = build_assembly_prompt(customer_name, surface_treatment_instructions)
     else:
         prompt_input = PromptInput(

@@ -1,6 +1,6 @@
 """Type definitions for PDF extraction."""
 
-from typing import Optional, Literal
+from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 from .constants import DEFAULT_GEMINI_MODEL
@@ -47,6 +47,57 @@ class TextSignal(BaseModel):
         populate_by_name = True
 
 
+class BomItem(BaseModel):
+    """One structured row from a drawing BOM."""
+
+    position: Optional[str] = None
+    part_number: Optional[str] = Field(None, alias="partNumber")
+    quantity: Optional[int] = None
+    description: Optional[str] = None
+    material: Optional[str] = None
+
+    class Config:
+        populate_by_name = True
+
+
+class TechnicalRisk(BaseModel):
+    """One evidence-backed manufacturability concern."""
+
+    severity: Optional[str] = None
+    category: Optional[str] = None
+    summary: str
+    evidence: Optional[str] = None
+
+    class Config:
+        populate_by_name = True
+
+
+class TechnicalAnalysis(BaseModel):
+    """Structured technical assessment, mainly used for assemblies."""
+
+    manufacturability_status: Optional[str] = Field(
+        None, alias="manufacturabilityStatus"
+    )
+    conclusion: Optional[str] = None
+    positive_checks: list[str] = Field(default_factory=list, alias="positiveChecks")
+    risks: list[TechnicalRisk] = Field(default_factory=list)
+    welding_notes: list[str] = Field(default_factory=list, alias="weldingNotes")
+    coating_requirements: list[str] = Field(
+        default_factory=list, alias="coatingRequirements"
+    )
+    revision_notes: list[str] = Field(default_factory=list, alias="revisionNotes")
+    gdt_requirements: list[str] = Field(default_factory=list, alias="gdtRequirements")
+    general_tolerances: list[str] = Field(
+        default_factory=list, alias="generalTolerances"
+    )
+    assembly_dimensions: list[str] = Field(
+        default_factory=list, alias="assemblyDimensions"
+    )
+
+    class Config:
+        populate_by_name = True
+
+
 class OrderItem(BaseModel):
     """Single part extracted from a PDF."""
     part_number: Optional[str] = Field(None, alias="partNumber")
@@ -56,8 +107,16 @@ class OrderItem(BaseModel):
     )
     surface_treatment: Optional[str] = Field(None, alias="surfaceTreatment")
     material: Optional[str] = None
+    revision: Optional[str] = None
     notes: Optional[str] = None
     bom_part_numbers: Optional[list[str]] = Field(None, alias="bomPartNumbers")
+    bom_items: Optional[list[BomItem]] = Field(None, alias="bomItems")
+    machining_operations: Optional[list[str]] = Field(
+        None, alias="machiningOperations"
+    )
+    technical_analysis: Optional[TechnicalAnalysis] = Field(
+        None, alias="technicalAnalysis"
+    )
     # Extra fields for XML output
     description: Optional[str] = None
     quantity: Optional[int] = None
@@ -103,6 +162,7 @@ class ExtractionOptions(BaseModel):
     pdf_filename: Optional[str] = Field(None, alias="pdfFilename")
     model: str = DEFAULT_GEMINI_MODEL
     is_assembly: bool = Field(default=False, alias="isAssembly")
+    technical_analysis: bool = Field(default=False, alias="technicalAnalysis")
 
     class Config:
         populate_by_name = True
