@@ -919,6 +919,7 @@ async def extract_order_details_from_pdf(
     customer_id = options.customer_id
     text_signals = options.text_signals
     pdf_filename = options.pdf_filename
+    expected_part_number = options.expected_part_number
     model_name = options.model
     is_assembly = options.is_assembly
     technical_analysis = options.technical_analysis
@@ -1000,8 +1001,14 @@ async def extract_order_details_from_pdf(
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON response from Gemini: {e}") from e
 
-    # Assign part number from filename
-    part_number = pdf_filename or "unknown_part_1"
+    # Validate Gemini's JSON before applying any local mapping or fallback.  A
+    # second validation below protects the final, post-processed contract.
+    raw_order_details = OrderDetails(**data)
+    data = raw_order_details.model_dump(by_alias=True, exclude_none=True)
+
+    # The STEP match is authoritative for identity.  The PDF filename remains
+    # available separately in ProcessingMetadata for provenance.
+    part_number = expected_part_number or pdf_filename or "unknown_part_1"
     if "items" in data:
         for item in data["items"]:
             item["partNumber"] = part_number

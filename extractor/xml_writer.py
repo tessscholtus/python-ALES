@@ -279,6 +279,18 @@ def build_simple_order_xml(data: OrderDetails) -> str:
         parts.append(f"    <FailedPDFs>{data.metadata.failed_pdfs}</FailedPDFs>")
         if data.metadata.detected_customer:
             parts.append(f"    <DetectedCustomer>{escape_xml(data.metadata.detected_customer)}</DetectedCustomer>")
+        append_text_element(parts, "    ", "SourcePDF", data.metadata.source_pdf)
+        append_text_element(parts, "    ", "StepPartId", data.metadata.step_part_id)
+        append_text_element(parts, "    ", "StepSolidIndex", data.metadata.step_solid_index)
+        append_text_element(parts, "    ", "StepPartName", data.metadata.step_part_name)
+        append_text_element(parts, "    ", "MatchStrategy", data.metadata.match_strategy)
+        append_text_element(parts, "    ", "MatchConfidence", data.metadata.match_confidence)
+        append_text_element(parts, "    ", "PreflightKind", data.metadata.preflight_kind)
+        append_text_element(parts, "    ", "PreflightRoute", data.metadata.preflight_route)
+        append_text_element(parts, "    ", "PreflightConfidence", data.metadata.preflight_confidence)
+        append_text_element(parts, "    ", "PreflightMs", data.metadata.preflight_ms)
+        append_text_element(parts, "    ", "GeminiModel", data.metadata.gemini_model)
+        append_text_element(parts, "    ", "GeminiSeconds", data.metadata.gemini_seconds)
         parts.append("  </Metadata>")
 
     if data.drawing_number:

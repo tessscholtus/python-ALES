@@ -160,6 +160,18 @@ class ProcessingMetadata(BaseModel):
     successful_pdfs: int = Field(alias="successfulPDFs")
     failed_pdfs: int = Field(alias="failedPDFs")
     detected_customer: Optional[str] = Field(None, alias="detectedCustomer")
+    source_pdf: Optional[str] = Field(None, alias="sourcePDF")
+    step_part_id: Optional[str] = Field(None, alias="stepPartId")
+    step_solid_index: Optional[int] = Field(None, alias="stepSolidIndex")
+    step_part_name: Optional[str] = Field(None, alias="stepPartName")
+    match_strategy: Optional[str] = Field(None, alias="matchStrategy")
+    match_confidence: Optional[float] = Field(None, alias="matchConfidence")
+    preflight_kind: Optional[str] = Field(None, alias="preflightKind")
+    preflight_route: Optional[str] = Field(None, alias="preflightRoute")
+    preflight_confidence: Optional[float] = Field(None, alias="preflightConfidence")
+    preflight_ms: Optional[float] = Field(None, alias="preflightMs")
+    gemini_model: Optional[str] = Field(None, alias="geminiModel")
+    gemini_seconds: Optional[float] = Field(None, alias="geminiSeconds")
 
     class Config:
         populate_by_name = True
@@ -187,6 +199,7 @@ class ExtractionOptions(BaseModel):
     customer_id: str = Field(default="elten", alias="customerId")
     text_signals: list[TextSignal] = Field(default_factory=list, alias="textSignals")
     pdf_filename: Optional[str] = Field(None, alias="pdfFilename")
+    expected_part_number: Optional[str] = Field(None, alias="expectedPartNumber")
     model: str = DEFAULT_GEMINI_MODEL
     is_assembly: bool = Field(default=False, alias="isAssembly")
     technical_analysis: bool = Field(default=False, alias="technicalAnalysis")

@@ -87,16 +87,20 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
 
 def find_config_root() -> Path:
     """Find the config root directory."""
+    configured_root = os.environ.get("PDF_EXTRACTOR_CONFIG_ROOT")
+    if configured_root:
+        return Path(configured_root).expanduser().resolve()
+
     # Check multiple possible locations
     possible_paths = [
+        Path(__file__).parent.parent / "config",
         Path.cwd() / "config",
         Path.cwd() / "python_version" / "config",
-        Path(__file__).parent.parent / "config",
         Path.cwd() / "public" / "config",  # Original TypeScript location
     ]
 
     for path in possible_paths:
-        if path.exists():
+        if (path / "base.yaml").is_file():
             return path
 
     # Default to config in current directory

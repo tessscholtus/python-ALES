@@ -15,7 +15,7 @@ import random
 import sys
 import time
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Callable, Literal, Optional
 
 import click
 from dotenv import load_dotenv
@@ -52,6 +52,17 @@ load_dotenv()
 
 console = Console()
 ScanDepth = Literal["auto", "fast", "deep"]
+GeminiPolicy = Literal["auto", "always", "vision_only", "never"]
+StatusCallback = Callable[[str, dict[str, Any]], None]
+
+
+def _emit_status(
+    callback: Optional[StatusCallback],
+    event: str,
+    **payload: Any,
+) -> None:
+    if callback is not None:
+        callback(event, payload)
 
 
 async def process_with_retry(
@@ -150,21 +161,48 @@ def is_sparse_extraction(data: OrderDetails) -> bool:
     return True
 
 
+def should_run_gemini(preflight: PdfPreflightResult, policy: GeminiPolicy) -> bool:
+    """Apply the operator policy after structural preflight."""
+
+    if policy == "never":
+        return False
+    if policy == "vision_only":
+        return preflight.needs_visual_scan
+    if policy == "always":
+        return True
+    return preflight.route != "manual_review"
+
+
 async def extract_routed_pdf(
     pdf_path: Path,
     *,
     customer_id: str,
     scan_depth: ScanDepth = "auto",
     requested_model: Optional[str] = None,
+    expected_part_number: Optional[str] = None,
+    preflight_result: Optional[PdfPreflightResult] = None,
+    status_callback: Optional[StatusCallback] = None,
+    gemini_policy: GeminiPolicy = "auto",
 ) -> tuple[OrderDetails, PdfPreflightResult, str, float]:
     """Run preflight and automatically choose the cheapest safe extraction route."""
 
-    preflight = preflight_pdf(pdf_path)
+    preflight = preflight_result or preflight_pdf(pdf_path)
     console.print(
         f"[dim]Preflight: {preflight.kind}, route={preflight.route}, "
         f"complexity={preflight.complexity}, {preflight.elapsed_ms:.0f} ms[/dim]"
     )
     console.print(f"[dim]Evidence: {preflight.evidence}[/dim]")
+    _emit_status(
+        status_callback,
+        "preflight_completed",
+        kind=preflight.kind,
+        route=preflight.route,
+        complexity=preflight.complexity,
+        confidence=preflight.confidence,
+        elapsed_ms=preflight.elapsed_ms,
+        evidence=preflight.evidence,
+        error=preflight.error,
+    )
 
     if preflight.kind in {"protected", "unreadable"}:
         detail = f": {preflight.error}" if preflight.error else ""
@@ -178,14 +216,44 @@ async def extract_routed_pdf(
             0.0,
         )
 
+    if not should_run_gemini(preflight, gemini_policy):
+        reason = (
+            "preflight_manual_review"
+            if preflight.route == "manual_review"
+            else f"policy_{gemini_policy}"
+        )
+        console.print(f"[yellow]Gemini overgeslagen ({reason}).[/yellow]")
+        _emit_status(
+            status_callback,
+            "gemini_skipped",
+            policy=gemini_policy,
+            reason=reason,
+        )
+        return (
+            OrderDetails(
+                items=[
+                    OrderItem(
+                        part_number=expected_part_number or pdf_path.stem,
+                        status="SUCCESS",
+                        notes="Alleen PDF-preflight uitgevoerd; Gemini overgeslagen.",
+                    )
+                ]
+            ),
+            preflight,
+            "none",
+            0.0,
+        )
+
     selected_model = select_model(preflight, scan_depth, requested_model)
     pdf_base64 = read_pdf_as_base64(pdf_path)
     options = ExtractionOptions(
         customer_id=customer_id,
         pdf_filename=pdf_path.stem,
+        expected_part_number=expected_part_number,
         model=selected_model,
     )
     ai_started = time.perf_counter()
+    _emit_status(status_callback, "gemini_started", model=selected_model)
     data = await process_with_retry(pdf_base64, options)
 
     # No manual second command is required for outlined/raster PDFs. Auto mode
@@ -200,10 +268,17 @@ async def extract_routed_pdf(
             "[yellow]Fast visual result was empty; retrying once with the deep model.[/yellow]"
         )
         options.model = DEEP_GEMINI_MODEL
+        _emit_status(status_callback, "gemini_deep_retry_started", model=DEEP_GEMINI_MODEL)
         data = await process_with_retry(pdf_base64, options, max_retries=0)
         selected_model = DEEP_GEMINI_MODEL
 
     ai_time = time.perf_counter() - ai_started
+    _emit_status(
+        status_callback,
+        "gemini_completed",
+        model=selected_model,
+        elapsed_seconds=ai_time,
+    )
     return data, preflight, selected_model, ai_time
 
 
